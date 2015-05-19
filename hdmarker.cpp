@@ -65,7 +65,7 @@ const int corner_score_dead = 2;
 const int dir_step = 16;
 const int dir_step_sub = 32;
 //FIXME global var in header...
-const int dir_step_refine = 128;
+const bool dir_refine = false;
 //FIXME post detection refinement + adapt with effort
 const float refine_min_step = 1.0/16.0;
 const float refine_max_step = 0.5;
@@ -637,8 +637,11 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
 	      test_dir[1].x = corner_score_size*cos(b);
 	      test_dir[1].y = corner_score_size*sin(b);
 	      
+              
 	      test_score = scoreCorner(img, p, test_dir);
+              //printf("dir score %f == %f -> %f\n", scoreCorner(img, p, dir), score, test_score);
 	      if (test_score > score) {
+                //printf("yay better %f!\n", test_score);
 		change = true;
 		score = test_score;
 		dir[0] = test_dir[0];
@@ -772,8 +775,8 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
 		continue;
 	      
 	      c.score = scoreCorner(img, c.p, c.dir);
-	      //if (dir_step_refine)
- 		//c.refineDirIterative(img, dir_step_refine, dir_step_refine);
+	      if (dir_refine)
+ 		c.refineDirIterative(img, dir_step, dir_step_sub);
 	      
               //if (debug)
                 //printf("old score %f new score %f\n", score, c.score);
@@ -788,6 +791,50 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
           //printf("step %f %d iters\n", step, i);
       }
     }
+    
+    /*
+    void Marker_Corner::refine_size(Mat img, float refine_max, bool force, int dir_step_refine, int size, int dead)
+    {
+      bool change;
+      int i, sign, coord;
+      float step;
+      //angle
+      Marker_Corner c;
+      
+      if (refined && force == false)
+	return;
+      
+      refined = true;
+
+      score = scoreCorner(img, p, dir, size, dead);
+      
+      for(step=refine_max;step>=refine_min_step;step*=0.5) {
+	change = true;
+	for(i=0;i<1000 && change;i++) {
+	  change = false;
+	  for(coord=0;coord<2;coord++)
+	    for(sign=-1;sign<=1;sign+=2) {
+	      c = *this;
+	      if (!coord)
+		c.p.x +=sign*step;
+	      else
+		c.p.y +=sign*step;
+	      
+	      if (c.p.x <= 2*corner_score_size || c.p.y <= 2*corner_score_size || c.p.x >= img.size().width-2*corner_score_size || c.p.y >= img.size().height-2*corner_score_size) 
+		continue;
+	      
+	      c.score = scoreCorner(img, c.p, c.dir, size, dead);
+	      if (dir_refine)
+ 		c.refineDirIterative_size(img, dir_step, dir_step_sub, size, dead);
+              
+	      if (c.score > score) {
+		change = true;
+		*this = c;
+	      }
+	    }
+	}
+      }
+    }*/
     
     void Marker_Corner::refine(Mat img, bool force, int dir_step_refine)
     {
@@ -4042,6 +4089,8 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
   cvtColor(img, paint, COLOR_GRAY2BGR);
 #endif
   
+  resize(scales[1], scales[0], Size(scales[1].size().width*2,scales[1].size().height*2), INTER_LINEAR);
+  
 //FIXME either use normalized for corners or change in detect_scale (and refine for all scales?)
 #pragma omp parallel for private(mc)
   for(int j=0;j<allcorners.size();j++)
@@ -4063,6 +4112,13 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
 	      mc.refine(scales[s], true);
 	      mc.p = mc.p*sd;
 	    }
+            mc.refined = false;
+            mc.scale = 0;
+            mc.estimated = false;
+            mc.p = mc.p*2.0;
+            //mc.estimateDir(scales[s]);
+            mc.refine(scales[0], true);
+            mc.p = (mc.p)*0.5;
           //printf("%.2fx%.2f\n", mc.p.x, mc.p.y);
 	  (*allcorners[j])[i].p = mc.p;
 	  
