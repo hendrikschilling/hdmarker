@@ -1,0 +1,3 @@
+./hdmarker_generate 0 16 14 bigpage.png                                     
+convert bigpage.png bigpage.ppm                                                          
+potrace -o bigfile.pdf -n -t 0 -O 0 -a 0 -b pdf -W 512cm -H448cm bigpage.ppm
