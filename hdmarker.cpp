@@ -63,11 +63,11 @@ const int corner_score_dead = 2;
 //const int corner_threshold_high = 20;
 //FIXME adapt dirstep for effort 
 const int dir_step = 16;
-const int dir_step_sub = 32;
+const int dir_step_sub = 64;
 //FIXME global var in header...
-const bool dir_refine = false;
+const int dir_step_refine = 0;
 //FIXME post detection refinement + adapt with effort
-const float refine_min_step = 1.0/16.0;
+const float refine_min_step = 1.0/64.0;
 const float refine_max_step = 0.5;
 const int marker_neighbour_valid_count = 3;
 const int marker_neighbour_sure_count = 3;
@@ -775,8 +775,8 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
 		continue;
 	      
 	      c.score = scoreCorner(img, c.p, c.dir);
-	      if (dir_refine)
- 		c.refineDirIterative(img, dir_step, dir_step_sub);
+	      if (dir_step_refine)
+ 		c.refineDirIterative(img, dir_step_refine, dir_step_refine);
 	      
               //if (debug)
                 //printf("old score %f new score %f\n", score, c.score);
