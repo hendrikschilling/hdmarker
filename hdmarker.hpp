@@ -31,9 +31,11 @@ public :
   void paint(cv::Mat &paint);
   void refineDir(cv::Mat img, float range);
   void refineDirIterative(cv::Mat img, int min_step, int max_step);
+  void refineDirIterative_size(cv::Mat img, int min_step, int max_step, int size, int dead);
   void refineDirIterative(cv::Mat img);
   void refine(cv::Mat img, bool force = false, int dir_step_refine = 0);
   void refine(cv::Mat img, float max_step, bool force = false, int dir_step_refine = 0);
+  void refine_size(cv::Mat img, float refine_max, bool force, int dir_step_refine, int size, int dead);
   void estimateDir(cv::Mat img);
   void estimateDir(cv::Mat img, cv::Mat &paint);
 };
