@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 2.6)
 project(hdmarker)
 
-
 #for now we always assume X86!
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # using regular Clang or AppleClang
@@ -19,7 +18,7 @@ if (APPLE)
     message(WARNING "APPLE system detected, disabling timing/benchmarking")
     #for cmake < 3.0
     if (NOT DEFINED CMAKE_MACOSX_RPATH)
-        set(CMAKE_MACOSX_RPATH 0)
+        set(CMAKE_MACOSX_RPATH 1)
     endif()
 endif()
 

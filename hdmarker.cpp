@@ -739,7 +739,7 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
       float step;
       //angle
       Marker_Corner c;
-      bool debug = false;
+      /*bool debug = false;
       
       Point2f testp(680/pow(2, scale)*2, 480/pow(2, scale)*2);
       
@@ -747,9 +747,7 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
       if (testp.x*testp.x + testp.y*testp.y < 25) {
         printf("enable debug at scale %d\n", scale);
         debug = true;
-      }
-      
-      //return;
+      }*/
       
       if (refined && force == false)
 	return;
@@ -777,8 +775,8 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
 	      //if (dir_step_refine)
  		//c.refineDirIterative(img, dir_step_refine, dir_step_refine);
 	      
-              if (debug)
-                printf("old score %f new score %f\n", score, c.score);
+              //if (debug)
+                //printf("old score %f new score %f\n", score, c.score);
               
 	      if (c.score > score) {
 		change = true;
@@ -786,8 +784,8 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
 	      }
 	    }
 	}
-	if (debug)
-          printf("step %f %d iters\n", step, i);
+	//if (debug)
+          //printf("step %f %d iters\n", step, i);
       }
     }
     
@@ -4030,14 +4028,14 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
     m->getCorners(c);
     if (!allcorners[m->page])
       allcorners[m->page] = new vector<Marker_Corner>(35*35);
-    /*if ((*allcorners[m->page])[c[0].coord.y*32+c[0].coord.x].page == -1 || (*allcorners[m->page])[c[0].coord.y*32+c[0].coord.x].score < c[0].score)*
-      (*allcorners[m->page])[c[0].coord.y*32+c[0].coord.x] = c[0];*/
+    if ((*allcorners[m->page])[c[0].coord.y*32+c[0].coord.x].page == -1 || (*allcorners[m->page])[c[0].coord.y*32+c[0].coord.x].score < c[0].score)
+      (*allcorners[m->page])[c[0].coord.y*32+c[0].coord.x] = c[0];
     if ((*allcorners[m->page])[c[1].coord.y*32+c[1].coord.x].page == -1 || (*allcorners[m->page])[c[1].coord.y*32+c[1].coord.x].score < c[1].score)
       (*allcorners[m->page])[c[1].coord.y*32+c[1].coord.x] = c[1];
-    /*if ((*allcorners[m->page])[c[2].coord.y*32+c[2].coord.x].page == -1 || (*allcorners[m->page])[c[2].coord.y*32+c[2].coord.x].score < c[2].score)
+    if ((*allcorners[m->page])[c[2].coord.y*32+c[2].coord.x].page == -1 || (*allcorners[m->page])[c[2].coord.y*32+c[2].coord.x].score < c[2].score)
       (*allcorners[m->page])[c[2].coord.y*32+c[2].coord.x] = c[2];
     if ((*allcorners[m->page])[c[3].coord.y*32+c[3].coord.x].page == -1 || (*allcorners[m->page])[c[3].coord.y*32+c[3].coord.x].score < c[3].score)
-      (*allcorners[m->page])[c[3].coord.y*32+c[3].coord.x] = c[3];*/
+      (*allcorners[m->page])[c[3].coord.y*32+c[3].coord.x] = c[3];
   }
   
 #ifdef PAINT_CANDIDATE_CORNERS
