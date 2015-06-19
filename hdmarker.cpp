@@ -69,8 +69,8 @@ const int dir_step_refine = 64;
 //FIXME post detection refinement + adapt with effort
 const float refine_min_step = 1.0/64.0;
 const float refine_max_step = 0.5;
-const int marker_neighbour_valid_count = 3;
-const int marker_neighbour_sure_count = 3;
+const int marker_neighbour_valid_count = 2;
+const int marker_neighbour_sure_count = 5;
 const int chess_dist = 1;
 const float min_angle = 0.1; //0.1 ==  45deg?
 const float id_sharpen = 0.25;
@@ -79,7 +79,7 @@ const float marker_corner_dir_dist_max = 0.5*corner_score_size;
 const float marker_dir_corner_dist_max = 0.25;
 const float marker_corner_dir_rad_dist = M_PI/16*1.1;
 const float detection_scale_min = 0.5;
-const int post_detection_range = 1;
+const int post_detection_range = 5;
 
 uint16_t corner_patt_x_b[24];
 uint16_t corner_patt_y_b[24];
@@ -2620,7 +2620,7 @@ void localHistCont(Mat img, Mat &out, int size)
     for(int i=0;i<=2*size;i++)
       hist[img.at<uchar>(j, i)/hist_simplify]++;
   
-  for(y=size;y<img.size().height-size;y++) {      
+  for(y=size;y<img.size().height-size-1;y++) {      
     for(x=size;x<img.size().width-size-1;x++) {
       out.at<uchar>(y, x) = contrFromHist(hist, size, img.at<uchar>(y, x));
       
@@ -2673,7 +2673,7 @@ void localHistContOmp_slow(Mat img, Mat &out, int size)
 	hist[img.at<uchar>(j, i)/hist_simplify]++;
       
       x = size;
-    for(y=ychunk;y<min(img.size().height-size, ychunk+128);y++) {      
+    for(y=ychunk;y<min(img.size().height-size-1, ychunk+128);y++) {      
       for(x=size;x<img.size().width-size-1;x++) {
 	out.at<uchar>(y, x) = contrFromHist(hist, size, img.at<uchar>(y, x));
 	
@@ -3465,8 +3465,8 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
   corners2.resize(corners.size());
 #pragma omp parallel for
   for (uint32_t ci=0;ci<corners.size();ci++) {
-    //if (ci%500 == 0)
-      //cout << ci << "estimated of" << corners.size() << " found " << markers.size() << "markers " << "                  \r" << flush;
+    if (ci%500 == 0)
+      cout << ci << "estimated of" << corners.size() << " found " << markers.size() << "markers " << "                  \r" << flush;
     int mask = 7;
     //FIXME
     for(uint32_t i=0;i<markers.size() && mask;i++) {
@@ -3517,8 +3517,8 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
   //markers.resize(0);
 #pragma omp parallel for schedule(dynamic)
   for (uint32_t i=0;i<candidates.size();i++) {
-    //if (i%500 == 0)
-      //cout << i << "/" << candidates.size() << " found " << markers.size() << "markers, scale " << scale << "                  \r" << flush;
+    if (i%500 == 0)
+      cout << i << "/" << candidates.size() << " found " << markers.size() << "markers, scale " << scale << "                  \r" << flush;
     detect_marker((Marker_Corner*)candidates[i], checker, candidates, markers, imgs[scale_idx], small_hc_sb, scale);
   }
   //cout << i << "/" << candidates.size() << " found " << markers.size() << "markers, scale " << scale << endl;
@@ -4019,7 +4019,8 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
   
   norms[lowest_scale_idx].create((*scales)[lowest_scale_idx].size(), CV_8UC1);
   checkers[lowest_scale_idx].create((*scales)[lowest_scale_idx].size(), CV_8UC1);
-  norm_avg_SIMD((*scales)[lowest_scale_idx], norms[lowest_scale_idx], marker_basesize);
+  //norm_avg_SIMD((*scales)[lowest_scale_idx], norms[lowest_scale_idx], marker_basesize);
+  localHistCont((*scales)[lowest_scale_idx], norms[lowest_scale_idx], marker_basesize);
   simpleChessCorner_SIMD(norms[lowest_scale_idx], checkers[lowest_scale_idx], chess_dist);
   
   
@@ -4036,7 +4037,8 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
       
       norms[scale_idx].create((*scales)[scale_idx].size(), CV_8UC1);
       checkers[scale_idx].create((*scales)[scale_idx].size(), CV_8UC1);
-      norm_avg_SIMD((*scales)[scale_idx], norms[scale_idx], marker_basesize);
+      //norm_avg_SIMD((*scales)[scale_idx], norms[scale_idx], marker_basesize);
+      localHistCont((*scales)[scale_idx], norms[scale_idx], marker_basesize);
       simpleChessCorner_SIMD(norms[scale_idx], checkers[scale_idx], chess_dist);
       
 #ifdef USE_SLOW_CORNERs

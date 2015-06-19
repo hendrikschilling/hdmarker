@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
     for(int j=0;j<h;j++)
       for(int i=0;i<w;i++)
 	writemarker(img, page+j*w+i, 32*5*i, 32*5*j);
-    resize(img, img, Size(w*32*5*1, h*32*5*1), 0, 0, INTER_NEAREST);
+    //resize(img, img, Size(w*32*5*1, h*32*5*1), 0, 0, INTER_NEAREST);
     imwrite(argv[4], img);
   }
 
