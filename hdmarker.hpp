@@ -10,6 +10,7 @@ class Marker_Corner {
 public :
   cv::Point2f p, dir[2];
   int mask;
+  float size;
   int scale = 0;
   int x, y, page = -1;
   float dir_rad[2];
@@ -45,6 +46,7 @@ public :
   cv::Point2f p;
   cv::Point2i id;
   int page;
+  float size;
   
   Corner()
   {
@@ -58,11 +60,20 @@ public :
     page = cpage;
   }
   
+  Corner(Marker_Corner &c)
+  {
+    p = c.p;
+    id = c.coord;
+    page = c.page;
+    size = c.size;
+  }
+  
   Corner *operator=(Corner c)
   {
     p = c.p;
     id = c.id;
     page = c.page;
+    size = c.size;
     
     return this;
   }

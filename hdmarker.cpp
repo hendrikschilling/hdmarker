@@ -142,6 +142,7 @@ vector<Point2f> refine_corners;
       refined = m.refined;
       estimated = m.estimated;
       score = m.score;
+      size = m.size;
       return *this;
     }
     
@@ -1440,8 +1441,18 @@ double pattern_score(Mat patt)
     
     void Marker::getCorners(Marker_Corner c[4])
     {          
-      for(int i=0;i<4;i++)
+      float d;
+      Point2f v;
+      float mindist;
+      
+      for(int i=0;i<4;i++) {
 	c[i] = corners[i];
+        v = corners[(i+3)%4].p-corners[i].p;
+        mindist = sqrt(v.x*v.x+v.y*v.y);
+        v = corners[i].p-corners[(i+1)%4].p;
+        mindist += sqrt(v.x*v.x+v.y*v.y);
+        c[i].size = mindist+0.5;
+      }
       
       if (id % 2 == 0) {
 	c[1].coord.x = id % 32+1;
@@ -4213,7 +4224,8 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
               mc.estimated = false;
 	      mc.p = mc.p*(1.0/sd);
 	      //mc.estimateDir(scales[s]);
-	      mc.refine(scales[s], true);
+	      //mc.refine(scales[s], true);
+              mc.refine_size(scales[s], 1.0, true , 0, (mc.size+1.5)/sd, (mc.size+1.5)*0.5);
 	      mc.p = mc.p*sd;
 	    }
             mc.refined = false;
@@ -4221,7 +4233,8 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
             mc.estimated = false;
             mc.p = mc.p*2.0+Point2f(1.0,1.0);
             //mc.estimateDir(scales[s]);
-            mc.refine_size(scales[0], 1.0, true , 0, 8, 4);
+            mc.refine_size(scales[0], 1.0, true , 0, (mc.size+1.5), (mc.size+1.5)*0.5);
+            //printf("%02d %02d  ", (int)(mc.size+1), (int)((mc.size+2)*0.5));
             //mc.refine(scales[0], true);
             mc.p = (mc.p-Point2f(1.0,1.0))*0.5;
           //printf("%.2fx%.2f\n", mc.p.x, mc.p.y);
@@ -4234,10 +4247,10 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
 	    line(paint, mc.p, mc.p+3*mc.dir[0], CV_RGB(255,0,0), 1);
 	    line(paint, mc.p, mc.p+3*mc.dir[1], CV_RGB(0,255,0), 1);
 	    line(paint, (*allcorners[j])[i].p, mc.p, CV_RGB(0,0,255), 1);
-	    corners.push_back(Corner((*allcorners[j])[i].p, (*allcorners[j])[i].coord, (*allcorners[j])[i].page));
+	    corners.push_back(Corner((*allcorners[j])[i]));
 	    corners[corners.size()-1].paint(paint);
 #else
-	    corners.push_back(Corner((*allcorners[j])[i].p, (*allcorners[j])[i].coord, (*allcorners[j])[i].page));
+	    corners.push_back(Corner((*allcorners[j])[i]));
 #endif
 	  }
 	}
