@@ -11,6 +11,7 @@ public :
   cv::Point2f p, dir[2];
   int mask;
   float size;
+  float size_x, size_y;
   int scale = 0;
   int x, y, page = -1;
   float dir_rad[2];
@@ -37,6 +38,7 @@ public :
   void refine(cv::Mat img, bool force = false, int dir_step_refine = 0);
   void refine(cv::Mat img, float max_step, bool force = false, int dir_step_refine = 0);
   void refine_size(cv::Mat img, float refine_max, bool force, int dir_step_refine, int size, int dead);
+  void refine_gradient(cv::Mat &img, float scale);
   void estimateDir(cv::Mat img);
   void estimateDir(cv::Mat img, cv::Mat &paint);
 };

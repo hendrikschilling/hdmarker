@@ -90,6 +90,8 @@ void check_calibration(vector<Corner> &corners, int w, int h, Mat &img)
   Mat cameraMatrix(3,3,cv::DataType<double>::type);
   Mat distCoeffs;
   double rms;
+  vector<Point2f> projected;
+  Mat paint;
   
   vector<vector<Point3f>> world_points(1);
   vector<vector<Point2f>> img_points(1);
@@ -101,12 +103,28 @@ void check_calibration(vector<Corner> &corners, int w, int h, Mat &img)
   distCoeffs = Mat::zeros(1, 8, CV_64F);
   rms = calibrateCamera(world_points, img_points, Size(w, h), cameraMatrix, distCoeffs, rvecs, tvecs, CV_CALIB_RATIONAL_MODEL);
   printf("rms %f with full distortion correction\n", rms);
+    
+  projectPoints(world_points[0], rvecs[0], tvecs[0], cameraMatrix, distCoeffs, projected);
+  cvtColor(img, paint, CV_GRAY2BGR);
+  for(int i=0;i<projected.size();i++) {
+    Point2f d = projected[i] - img_points[0][i];
+    line(paint, img_points[0][i], img_points[0][i]+100*d, Scalar(0,0,255));
+  }
+  imwrite("off_hdm.png", paint);
   
-  cornerSubPix(img, img_points[0], Size(4,4), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
+  cornerSubPix(img, img_points[0], Size(6,6), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
   
   distCoeffs = Mat::zeros(1, 8, CV_64F);
   rms = calibrateCamera(world_points, img_points, Size(w, h), cameraMatrix, distCoeffs, rvecs, tvecs, CV_CALIB_RATIONAL_MODEL);
   printf("rms %f with full distortion correction, opencv cornerSubPix\n", rms);
+  
+  projectPoints(world_points[0], rvecs[0], tvecs[0], cameraMatrix, distCoeffs, projected);
+  cvtColor(img, paint, CV_GRAY2BGR);
+  for(int i=0;i<projected.size();i++) {
+    Point2f d = projected[i] - img_points[0][i];
+    line(paint, img_points[0][i], img_points[0][i]+100*d, Scalar(0,0,255));
+  }
+  imwrite("off_ocv.png", paint);
 }
 
 int main(int argc, char* argv[])

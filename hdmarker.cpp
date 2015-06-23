@@ -80,7 +80,7 @@ const float marker_dir_corner_dist_max = 0.25;
 const float marker_corner_dir_rad_dist = M_PI/16*1.1;
 const float detection_scale_min = 0.5;
 const int post_detection_range = 5;
-const float corner_score_oversampling = 2;
+const float corner_score_oversampling = 1;
 
 uint16_t corner_patt_x_b[24];
 uint16_t corner_patt_y_b[24];
@@ -897,6 +897,220 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
     }
     
     
+void cornerSubPixCP( InputArray _image, Point2f &p,
+                      Size win, Size zeroZone, TermCriteria criteria )
+{
+  const int MAX_ITERS = 100;
+  int win_w = win.width * 2 + 1, win_h = win.height * 2 + 1;
+  int i, j, k;
+  int max_iters = (criteria.type & CV_TERMCRIT_ITER) ? MIN(MAX(criteria.maxCount, 1), MAX_ITERS) : MAX_ITERS;
+  double eps = (criteria.type & CV_TERMCRIT_EPS) ? MAX(criteria.epsilon, 0.) : 0;
+  eps *= eps; // use square of error in comparsion operations
+
+  cv::Mat src = _image.getMat();
+
+  CV_Assert( win.width > 0 && win.height > 0 );
+  CV_Assert( src.cols >= win.width*2 + 5 && src.rows >= win.height*2 + 5 );
+  CV_Assert( src.channels() == 1 );
+
+  Mat maskm(win_h, win_w, CV_32F), subpix_buf(win_h+2, win_w+2, CV_32F);
+  float* mask = maskm.ptr<float>();
+
+  for( i = 0; i < win_h; i++ )
+  {
+      float y = (float)(i - win.height)/win.height;
+      float vy = std::exp(-y*y);
+      for( j = 0; j < win_w; j++ )
+      {
+          float x = (float)(j - win.width)/win.width;
+          mask[i * win_w + j] = (float)(vy*std::exp(-x*x));
+      }
+  }
+
+  // make zero_zone
+  if( zeroZone.width >= 0 && zeroZone.height >= 0 &&
+      zeroZone.width * 2 + 1 < win_w && zeroZone.height * 2 + 1 < win_h )
+  {
+      for( i = win.height - zeroZone.height; i <= win.height + zeroZone.height; i++ )
+      {
+          for( j = win.width - zeroZone.width; j <= win.width + zeroZone.width; j++ )
+          {
+              mask[i * win_w + j] = 0;
+          }
+      }
+  }
+
+    Point2f cT = p;
+    Point2f cI = p;
+    int iter = 0;
+    double err = 0;
+
+    do
+    {
+        Point2f cI2;
+        double a = 0, b = 0, c = 0, bb1 = 0, bb2 = 0;
+
+        getRectSubPix(src, Size(win_w+2, win_h+2), cI, subpix_buf, subpix_buf.type());
+        const float* subpix = &subpix_buf.at<float>(1,1);
+
+        // process gradient
+        for( i = 0, k = 0; i < win_h; i++, subpix += win_w + 2 )
+        {
+            double py = i - win.height;
+
+            for( j = 0; j < win_w; j++, k++ )
+            {
+                double m = mask[k];
+                double tgx = subpix[j+1] - subpix[j-1];
+                double tgy = subpix[j+win_w+2] - subpix[j-win_w-2];
+                double gxx = tgx * tgx * m;
+                double gxy = tgx * tgy * m;
+                double gyy = tgy * tgy * m;
+                double px = j - win.width;
+
+                a += gxx;
+                b += gxy;
+                c += gyy;
+
+                bb1 += gxx * px + gxy * py;
+                bb2 += gxy * px + gyy * py;
+            }
+        }
+
+        double det=a*c-b*b;
+        if( fabs( det ) <= DBL_EPSILON*DBL_EPSILON )
+            break;
+
+        // 2x2 matrix inversion
+        double scale=1.0/det;
+        cI2.x = (float)(cI.x + c*scale*bb1 - b*scale*bb2);
+        cI2.y = (float)(cI.y - b*scale*bb1 + a*scale*bb2);
+        err = (cI2.x - cI.x) * (cI2.x - cI.x) + (cI2.y - cI.y) * (cI2.y - cI.y);
+        cI = cI2;
+        if( cI.x < 0 || cI.x >= src.cols || cI.y < 0 || cI.y >= src.rows )
+            break;
+    }
+    while( ++iter < max_iters && err > eps );
+
+    // if new point is too far from initial, it means poor convergence.
+    // leave initial point as the result
+    if( fabs( cI.x - cT.x ) > win.width || fabs( cI.y - cT.y ) > win.height )
+        cI = cT;
+
+    p = cI;
+}
+
+
+void cornerSubPixCPMask( InputArray _image, Point2f &p,
+                      Size win, Size zeroZone, TermCriteria criteria )
+{
+  const int MAX_ITERS = 100;
+  int win_w = win.width * 2 + 1, win_h = win.height * 2 + 1;
+  int i, j, k;
+  int max_iters = (criteria.type & CV_TERMCRIT_ITER) ? MIN(MAX(criteria.maxCount, 1), MAX_ITERS) : MAX_ITERS;
+  double eps = (criteria.type & CV_TERMCRIT_EPS) ? MAX(criteria.epsilon, 0.) : 0;
+  eps *= eps; // use square of error in comparsion operations
+
+  cv::Mat src = _image.getMat();
+
+  CV_Assert( win.width > 0 && win.height > 0 );
+  CV_Assert( src.cols >= win.width*2 + 5 && src.rows >= win.height*2 + 5 );
+  CV_Assert( src.channels() == 1 );
+
+  Mat maskm(win_h, win_w, CV_32F), subpix_buf(win_h+2, win_w+2, CV_32F);
+  float* mask = maskm.ptr<float>();
+
+  for( i = 0; i < win_h; i++ )
+  {
+      float y = (float)(i - win.height)/win.height;
+      float vy = std::exp(-y*y);
+      for( j = 0; j < win_w; j++ )
+      {
+          float x = (float)(j - win.width)/win.width;
+          mask[i * win_w + j] = (float)(vy*std::exp(-x*x));
+      }
+  }
+
+  // make zero_zone
+  if( zeroZone.width >= 0 && zeroZone.height >= 0 &&
+      zeroZone.width * 2 + 1 < win_w && zeroZone.height * 2 + 1 < win_h )
+  {
+      for( i = win.height - zeroZone.height; i <= win.height + zeroZone.height; i++ )
+      {
+          for( j = win.width - zeroZone.width; j <= win.width + zeroZone.width; j++ )
+          {
+              mask[i * win_w + j] = 0;
+          }
+      }
+  }
+
+    Point2f cT = p;
+    Point2f cI = p;
+    int iter = 0;
+    double err = 0;
+
+    do
+    {
+        Point2f cI2;
+        double a = 0, b = 0, c = 0, bb1 = 0, bb2 = 0;
+
+        getRectSubPix(src, Size(win_w+2, win_h+2), cI, subpix_buf, subpix_buf.type());
+        const float* subpix = &subpix_buf.at<float>(1,1);
+
+        // process gradient
+        for( i = 0, k = 0; i < win_h; i++, subpix += win_w + 2 )
+        {
+            double py = i - win.height;
+
+            for( j = 0; j < win_w; j++, k++ )
+            {
+                double m = mask[k];
+                double tgx = subpix[j+1] - subpix[j-1];
+                double tgy = subpix[j+win_w+2] - subpix[j-win_w-2];
+                double gxx = tgx * tgx * m;
+                double gxy = tgx * tgy * m;
+                double gyy = tgy * tgy * m;
+                double px = j - win.width;
+
+                a += gxx;
+                b += gxy;
+                c += gyy;
+
+                bb1 += gxx * px + gxy * py;
+                bb2 += gxy * px + gyy * py;
+            }
+        }
+
+        double det=a*c-b*b;
+        if( fabs( det ) <= DBL_EPSILON*DBL_EPSILON )
+            break;
+
+        // 2x2 matrix inversion
+        double scale=1.0/det;
+        cI2.x = (float)(cI.x + c*scale*bb1 - b*scale*bb2);
+        cI2.y = (float)(cI.y - b*scale*bb1 + a*scale*bb2);
+        err = (cI2.x - cI.x) * (cI2.x - cI.x) + (cI2.y - cI.y) * (cI2.y - cI.y);
+        cI = cI2;
+        if( cI.x < 0 || cI.x >= src.cols || cI.y < 0 || cI.y >= src.rows )
+            break;
+    }
+    while( ++iter < max_iters && err > eps );
+
+    // if new point is too far from initial, it means poor convergence.
+    // leave initial point as the result
+    if( fabs( cI.x - cT.x ) > win.width || fabs( cI.y - cT.y ) > win.height )
+        cI = cT;
+
+    p = cI;
+}
+    
+    
+    void Marker_Corner::refine_gradient(Mat &img, float scale)
+    {
+      cornerSubPixCP(img, p, Size(size/6,size/6), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
+    }
+    
+    
     void Marker_Corner::refine_size(Mat img, float refine_max, bool force, int dir_step_refine, int size, int dead)
     {
       bool change;
@@ -916,6 +1130,11 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
       dir[1].x = size*cos(dir_rad[1]);
       dir[1].y = size*sin(dir_rad[1]);
       
+      if (p.x <= size || p.y <= size || p.x >= img.size().width - size || p.y >= img.size().height-size) {
+        printf("error: too close to border, could not refine\n");
+        return;
+      }
+        
       score = scoreCorner(img, p, dir, cso*size, cso*dead);
       
       for(step=refine_max;step>=refine_min_step;step*=0.5) {
@@ -1460,7 +1679,7 @@ double pattern_score(Mat patt)
         v = corners[i].p-corners[(i+1)%4].p;
         mindist += sqrt(v.x*v.x+v.y*v.y);
         c[i].dir_rad[0] = atan2(v.y, v.x);
-        c[i].size = mindist+0.5;
+        c[i].size = mindist*0.5;
       }
       
       
@@ -3681,8 +3900,8 @@ int try_marker_from_corners(Mat &img, Marker_Corner c[3], int page, int id, vect
       return 0;
     c[i].scale = 1;
     c[i].refine(img, true, 0);
-    //if (c[i].score < corner_ok)
-      //return 0;
+    if (c[i].score < corner_ok)
+      return 0;
   }
   m = Marker(Mat(Size(9, 9), CV_8UC1), img, 0.0, &c[0], &c[1], &c[2], 1.0, page, id);
   if (m.id == id && m.page == page) {
@@ -4228,25 +4447,27 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
 	 //mc.estimated = false;
 	  //FIXME check/verify accuracy!
 	 //if (mc.scale >= 2)
-	  for(int s=log2(mc.scale)+1,sd=mc.scale;s>=1;s--,sd/=2) {
+          //FIXME what if mc.scale == 0!
+	  /*for(int s=log2(mc.scale)+1,sd=mc.scale;s>=1;s--,sd/=2) {
               mc.refined = false;
               mc.scale = s;
               mc.estimated = false;
 	      mc.p = mc.p*(1.0/sd);
 	      //mc.estimateDir(scales[s]);
 	      mc.refine(scales[s], true);
-              mc.refine_size(scales[s], 1.0, true , 0, (mc.size)/sd/3, (mc.size)/sd/6);
+              mc.refine_size(scales[s], 1.0, true , 0, (mc.size)/sd, (mc.size)/sd/2);
 	      mc.p = mc.p*sd;
 	    }
             mc.refined = false;
             mc.scale = 0;
-            mc.estimated = false;
-            mc.p = mc.p*2.0+Point2f(1.0,1.0);
+            mc.estimated = false;*/
+            //mc.p = mc.p*2.0;
             //mc.estimateDir(scales[s]);
-            mc.refine_size(scales[0], 1.0, true , 0, mc.size/3, mc.size/6);
+            //mc.refine_size(scales[1], 1.0, true , 0, mc.size, mc.size/2);
+            mc.refine_gradient(scales[1], 1.0);
             //printf("%02d %02d  ", (int)(mc.size+1), (int)((mc.size+2)*0.5));
             //mc.refine(scales[0], true);
-            mc.p = (mc.p-Point2f(1.0,1.0))*0.5;
+            //mc.p = (mc.p-Point2f(1.0,1.0))*0.5;
           //printf("%.2fx%.2f\n", mc.p.x, mc.p.y);
 	  (*allcorners[j])[i].p = mc.p;
 	  
