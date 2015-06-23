@@ -112,7 +112,7 @@ void check_calibration(vector<Corner> &corners, int w, int h, Mat &img)
   }
   imwrite("off_hdm.png", paint);
   
-  cornerSubPix(img, img_points[0], Size(6,6), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
+  cornerSubPix(img, img_points[0], Size(4,4), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
   
   distCoeffs = Mat::zeros(1, 8, CV_64F);
   rms = calibrateCamera(world_points, img_points, Size(w, h), cameraMatrix, distCoeffs, rvecs, tvecs, CV_CALIB_RATIONAL_MODEL);
