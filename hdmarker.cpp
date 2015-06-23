@@ -1000,8 +1000,13 @@ void cornerSubPixCP( InputArray _image, Point2f &p,
     p = cI;
 }
 
+float ldist(Point2f base, Point2f dir_u, Point2f p)
+{
+  Point2f v = p-base;
+  return abs(dir_u.x*v.y - dir_u.y*v.x);
+}
 
-void cornerSubPixCPMask( InputArray _image, Point2f &p,
+void Marker_Corner::cornerSubPixCPMask( InputArray _image, Point2f &p,
                       Size win, Size zeroZone, TermCriteria criteria )
 {
   const int MAX_ITERS = 100;
@@ -1020,6 +1025,12 @@ void cornerSubPixCPMask( InputArray _image, Point2f &p,
   Mat maskm(win_h, win_w, CV_32F), subpix_buf(win_h+2, win_w+2, CV_32F);
   float* mask = maskm.ptr<float>();
 
+  Point2f d1 = Point2f(cos(dir_rad[0]), sin(dir_rad[0]));
+  Point2f d2 = Point2f(cos(dir_rad[1]), sin(dir_rad[1]));
+  Point2f m = Point2f(win.width, win.height);
+  
+  float scaler = sqrt(m.x*m.x+m.y*m.y);
+  
   for( i = 0; i < win_h; i++ )
   {
       float y = (float)(i - win.height)/win.height;
@@ -1027,9 +1038,13 @@ void cornerSubPixCPMask( InputArray _image, Point2f &p,
       for( j = 0; j < win_w; j++ )
       {
           float x = (float)(j - win.width)/win.width;
-          mask[i * win_w + j] = (float)(vy*std::exp(-x*x));
+          mask[i * win_w + j] = (float)(vy*std::exp(-x*x))*1.0/max(min(ldist(m, d1, Point2f(i, j)), ldist(m, d2, Point2f(i, j))), (float)1.0);
+          if (ldist(m, d1, Point2f(i, j)) >= size/10 && ldist(m, d2, Point2f(i, j)) >= size/10)
+            mask[i*win_w+j] = 0;
       }
   }
+  
+  imwrite("mask.png", maskm*256);
 
   // make zero_zone
   if( zeroZone.width >= 0 && zeroZone.height >= 0 &&
@@ -1107,7 +1122,8 @@ void cornerSubPixCPMask( InputArray _image, Point2f &p,
     
     void Marker_Corner::refine_gradient(Mat &img, float scale)
     {
-      cornerSubPixCP(img, p, Size(size/6,size/6), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
+      //cornerSubPixCP(img, p, Size(size/6,size/6), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
+      cornerSubPixCPMask(img, p, Size(size/4,size/4), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
     }
     
     

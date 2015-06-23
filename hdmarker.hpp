@@ -41,6 +41,8 @@ public :
   void refine_gradient(cv::Mat &img, float scale);
   void estimateDir(cv::Mat img);
   void estimateDir(cv::Mat img, cv::Mat &paint);
+  void cornerSubPixCPMask(cv::InputArray _image, cv::Point2f &p,
+                      cv::Size win, cv::Size zeroZone, cv::TermCriteria criteria);
 };
 
 class Corner {
