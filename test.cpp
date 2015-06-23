@@ -84,7 +84,7 @@ bool calib_savepoints(vector<vector<Point2f> > &all_img_points, vector<vector<Po
   return true;
 }
 
-void check_calibration(vector<Corner> &corners, int w, int h)
+void check_calibration(vector<Corner> &corners, int w, int h, Mat &img)
 {
   vector<Mat> rvecs, tvecs;
   Mat cameraMatrix(3,3,cv::DataType<double>::type);
@@ -101,6 +101,12 @@ void check_calibration(vector<Corner> &corners, int w, int h)
   distCoeffs = Mat::zeros(1, 8, CV_64F);
   rms = calibrateCamera(world_points, img_points, Size(w, h), cameraMatrix, distCoeffs, rvecs, tvecs, CV_CALIB_RATIONAL_MODEL);
   printf("rms %f with full distortion correction\n", rms);
+  
+  cornerSubPix(img, img_points[0], Size(4,4), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
+  
+  distCoeffs = Mat::zeros(1, 8, CV_64F);
+  rms = calibrateCamera(world_points, img_points, Size(w, h), cameraMatrix, distCoeffs, rvecs, tvecs, CV_CALIB_RATIONAL_MODEL);
+  printf("rms %f with full distortion correction, opencv cornerSubPix\n", rms);
 }
 
 int main(int argc, char* argv[])
@@ -144,7 +150,7 @@ int main(int argc, char* argv[])
     putText(paint, buf, c.p, FONT_HERSHEY_PLAIN, 0.5, Scalar(255,255,255,0), 1, CV_AA);
   }
   
-  check_calibration(corners, img.size().width, img.size().height);
+  check_calibration(corners, img.size().width, img.size().height, img);
   
   imwrite(argv[2], paint);
   
