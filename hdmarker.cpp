@@ -904,6 +904,7 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
       float step;
       //angle
       Marker_Corner c;
+      float cso = corner_score_oversampling;
       
       if (refined && force == false)
 	return;
@@ -915,7 +916,7 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
       dir[1].x = size*cos(dir_rad[1]);
       dir[1].y = size*sin(dir_rad[1]);
       
-      score = scoreCorner(img, p, dir, corner_score_oversampling*size, corner_score_oversampling*dead);
+      score = scoreCorner(img, p, dir, cso*size, cso*dead);
       
       for(step=refine_max;step>=refine_min_step;step*=0.5) {
 	change = true;
@@ -929,10 +930,10 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
 	      else
 		c.p.y +=sign*step;
 	      
-	      if (c.p.x <= 2*size || c.p.y <= 2*size || c.p.x >= img.size().width-2*size || c.p.y >= img.size().height-2*size) 
+	      if (c.p.x <= 2*cso*size || c.p.y <= 2*cso*size || c.p.x >= img.size().width-2*cso*size || c.p.y >= img.size().height-2*cso*size) 
 		continue;
 	      
-	      c.score = scoreCorner(img, c.p, c.dir, corner_score_oversampling*size, corner_score_oversampling*dead);
+	      c.score = scoreCorner(img, c.p, c.dir, cso*size, cso*dead);
 	      if (dir_step_refine)
  		c.refineDirIterative_size(img, dir_step_refine, dir_step_refine, size, dead);
               
@@ -3557,7 +3558,7 @@ int checkneighbours(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> &
   Marker *m;
   int found = 0;
   int pdc = post_detection_range;
-  int css = 2*corner_score_size;
+  int css = 2*corner_score_oversampling*corner_score_size;
   int w = img.size().width;
   int h = img.size().height;
   
@@ -3665,7 +3666,7 @@ void corners_offset(Marker_Corner c[3], int offx, int offy, Point2f dx, Point2f 
 
 int try_marker_from_corners(Mat &img, Marker_Corner c[3], int page, int id, vector<vector<int>*> &allmarkers, vector<Marker> &markers)
 {
-  int css = 2*corner_score_size;
+  int css = 2*corner_score_oversampling*corner_score_size;
   int w = img.size().width;
   int h = img.size().height;
   Marker m;
@@ -3791,7 +3792,7 @@ int checkneighbours2(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> 
   Marker *m,*m2;
   int found = 0;
   int pdc = post_detection_range;
-  int css = 2*corner_score_size;
+  int css = 2*corner_score_oversampling*corner_score_size;
   int w = img.size().width;
   int h = img.size().height;
   
