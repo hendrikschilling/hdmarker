@@ -6,11 +6,15 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 
+#include <iostream>
+
 using namespace std;
 using namespace cv;
 
 const int grid_width = 16;
 const int grid_height = 14;
+
+const bool use_rgb = true;
 
 void usage(const char *c)
 {
@@ -41,14 +45,14 @@ Point2f grid_to_world(Corner &c, int grid_w)
   return p;
 }
 
-bool calib_savepoints(vector<vector<Point2f> > &all_img_points, vector<vector<Point3f> > &all_world_points, vector<Corner> corners, int hpages, int vpages)
+bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<Point3f> > &all_world_points, vector<Corner> corners, int hpages, int vpages)
 {
   if (!corners.size()) return false;
   
   vector<Point2f> plane_points;
-  vector<Point2f> img_points;
+  vector<Point2f> img_points[4];
   vector<Point3f> world_points;
-  vector<Point2f> img_points_check;
+  vector<Point2f> img_points_check[4];
   vector<Point2f> world_points_check;
   vector <uchar> inliers;
   
@@ -62,26 +66,60 @@ bool calib_savepoints(vector<vector<Point2f> > &all_img_points, vector<vector<Po
     py = corners[i].page / hpages;
     px*=32;
     py*=32;
-    img_points_check.push_back(corners[i].p);
+    img_points_check[0].push_back(corners[i].p);
+    for(int c=1;c<4;c++)
+      if (all_img_points[c].size())
+        img_points_check[c].push_back(corners[i].pc[c-1]);
     world_points_check.push_back(grid_to_world(corners[i], hpages));
   }
   
   inliers.resize(world_points_check.size());
-  findHomography(world_points_check, img_points_check, CV_RANSAC, 100, inliers);
+  findHomography(world_points_check, img_points_check[0], CV_RANSAC, 200, inliers);
   
   for(uint i=0;i<inliers.size();i++) {
     if (!inliers[i])
       continue;
-    img_points.push_back(img_points_check[i]);
+    img_points[0].push_back((img_points_check[0])[i]);
+    for(int c=1;c<4;c++)
+      if (all_img_points[c].size())
+        img_points[c].push_back((img_points_check[c])[i]);
     world_points.push_back(add_zero_z(world_points_check[i]));
   }
   
-  printf("findHomography: %d inliers of %d calibration points (%.2f%%)\n", img_points.size(),img_points_check.size(),img_points.size()*100.0/img_points_check.size());
+  printf("findHomography: %d inliers of %d calibration points (%.2f%%)\n", img_points[0].size(),img_points_check[0].size(),img_points[0].size()*100.0/img_points_check[0].size());
 
-  all_img_points[0] = img_points;
+  (all_img_points[0])[0] = img_points[0];
+  for(int c=1;c<4;c++)
+    if (all_img_points[c].size())
+      (all_img_points[c])[0] = img_points[c];
   all_world_points[0] = world_points;
   
   return true;
+}
+
+void calibrate_channel(vector<vector<Point2f> > &img_points, vector<vector<Point3f> > &world_points, int w, int h, Mat &img)
+{
+  vector<Mat> rvecs, tvecs;
+  Mat cameraMatrix(3,3,cv::DataType<double>::type);
+  Mat distCoeffs;
+  double rms;
+  vector<Point2f> projected;
+  Mat paint;
+  
+  distCoeffs = Mat::zeros(1, 8, CV_64F);
+  rms = calibrateCamera(world_points, img_points, Size(w, h), cameraMatrix, distCoeffs, rvecs, tvecs, CV_CALIB_RATIONAL_MODEL);
+  printf("rms %f with full distortion correction\n", rms);
+    
+  projectPoints(world_points[0], rvecs[0], tvecs[0], cameraMatrix, distCoeffs, projected);
+  if (img.channels() == 1)
+    cvtColor(img, paint, CV_GRAY2BGR);
+  else
+    paint = img.clone();
+  for(int i=0;i<projected.size();i++) {
+    Point2f d = projected[i] - img_points[0][i];
+    line(paint, img_points[0][i], img_points[0][i]+100*d, Scalar(0,0,255));
+  }
+  imwrite("off_hdm.png", paint);
 }
 
 void check_calibration(vector<Corner> &corners, int w, int h, Mat &img)
@@ -94,25 +132,24 @@ void check_calibration(vector<Corner> &corners, int w, int h, Mat &img)
   Mat paint;
   
   vector<vector<Point3f>> world_points(1);
-  vector<vector<Point2f>> img_points(1);
+  vector<vector<Point2f>> img_points[4];
   
+  img_points[0].resize(1);
+  if (use_rgb)
+    for(int c=1;c<4;c++)
+      img_points[c].resize(1);
+    
   if (!calib_savepoints(img_points, world_points, corners, grid_width, grid_height)) {
     return;
   }
   
-  distCoeffs = Mat::zeros(1, 8, CV_64F);
-  rms = calibrateCamera(world_points, img_points, Size(w, h), cameraMatrix, distCoeffs, rvecs, tvecs, CV_CALIB_RATIONAL_MODEL);
-  printf("rms %f with full distortion correction\n", rms);
-    
-  projectPoints(world_points[0], rvecs[0], tvecs[0], cameraMatrix, distCoeffs, projected);
-  cvtColor(img, paint, CV_GRAY2BGR);
-  for(int i=0;i<projected.size();i++) {
-    Point2f d = projected[i] - img_points[0][i];
-    line(paint, img_points[0][i], img_points[0][i]+100*d, Scalar(0,0,255));
-  }
-  imwrite("off_hdm.png", paint);
+  calibrate_channel(img_points[0], world_points, w, h, img);
+  if (use_rgb)
+    for(int c=1;c<4;c++)
+      calibrate_channel(img_points[c], world_points, w, h, img);
+
   
-  cornerSubPix(img, img_points[0], Size(4,4), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
+  /*cornerSubPix(img, img_points[0], Size(4,4), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
   
   distCoeffs = Mat::zeros(1, 8, CV_64F);
   rms = calibrateCamera(world_points, img_points, Size(w, h), cameraMatrix, distCoeffs, rvecs, tvecs, CV_CALIB_RATIONAL_MODEL);
@@ -124,10 +161,10 @@ void check_calibration(vector<Corner> &corners, int w, int h, Mat &img)
     Point2f d = projected[i] - img_points[0][i];
     line(paint, img_points[0][i], img_points[0][i]+100*d, Scalar(0,0,255));
   }
-  imwrite("off_ocv.png", paint);
+  imwrite("off_ocv.png", paint);*/
 }
 
-
+/*
 void check_precision(vector<Corner> &corners, int w, int h, Mat &img, const char *ref)
 {
   vector<Mat> rvecs, tvecs;
@@ -170,7 +207,7 @@ void check_precision(vector<Corner> &corners, int w, int h, Mat &img, const char
     line(paint, img_points[0][i], img_points[0][i]+100*d, Scalar(0,0,255));
   }
   imwrite("off_ocv.png", paint);
-}
+}*/
 
 void corrupt(Mat &img)
 {
@@ -197,18 +234,18 @@ int main(int argc, char* argv[])
   /*if (argc != 3 && argc != 4)
     usage(argv[0]);*/
   
-  img = cv::imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
+  img = cv::imread(argv[1]);
   paint = cv::imread(argv[1]);
-  corrupt(img);
+  //corrupt(img);
   imwrite("corrupted.png", img);
   Marker::init();
   
   microbench_measure_output("app startup");
   //CALLGRIND_START_INSTRUMENTATION;
   if (argc == 4)
-    Marker::detect(img, corners,0,0,atof(argv[3]),100);
+    Marker::detect(img, corners,use_rgb,0,0,atof(argv[3]),100);
   else
-    Marker::detect(img, corners,0,0,0.5);
+    Marker::detect(img, corners,use_rgb,0,0,0.5);
   //CALLGRIND_STOP_INSTRUMENTATION;
     
   microbench_init();

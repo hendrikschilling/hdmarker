@@ -132,6 +132,9 @@ vector<Point2f> refine_corners;
     Marker_Corner Marker_Corner::operator=(Marker_Corner m)
     {
       p = m.p;
+      pc[0] = m.pc[0];
+      pc[1] = m.pc[1];
+      pc[2] = m.pc[2];
       dir[0] = m.dir[0];
       dir[1] = m.dir[1];
       coord = m.coord;
@@ -4407,7 +4410,7 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
     microbench_measure_run("full run");
 }
 
-void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int marker_size_min, float effort, int mincount)
+void Marker::detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_size_max, int marker_size_min, float effort, int mincount)
 {
   Marker_Corner c[4];
   Marker_Corner mc;
@@ -4416,7 +4419,7 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
   vector<vector<Marker_Corner>*> allcorners;
   vector<vector<int>*> allmarkers;
   vector<Corner> blub;
-  Mat paint;
+  Mat paint, col;
   vector<Mat> scales;
   vector<Marker> markers(0);
   int scale_min = 1;
@@ -4427,6 +4430,16 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
     scale_min *= 2;
   
   allcorners.resize(512);
+  
+  if (img.depth() != CV_8U)
+    img.convertTo(img, CV_8U);
+  
+  if (img.channels() != 1) {
+    col = img.clone();
+    cvtColor(img, img, CV_BGR2GRAY);
+  }
+  else
+    use_rgb = false;
   
   detect(img, markers, marker_size_max, marker_size_min, effort, mincount, &scales);
   
@@ -4450,6 +4463,11 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
 #endif
   
   resize(scales[1], scales[0], Size(scales[1].size().width*2,scales[1].size().height*2), INTER_LINEAR);
+  
+  Mat channels[3];
+  if (use_rgb) {
+    split(col, channels);
+  }
   
 //FIXME either use normalized for corners or change in detect_scale (and refine for all scales?)
 #pragma omp parallel for private(mc)
@@ -4481,11 +4499,27 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
             //mc.estimateDir(scales[s]);
             //mc.refine_size(scales[1], 1.0, true , 0, mc.size, mc.size/2);
             mc.refine_gradient(scales[1], 1.0);
+
             //printf("%02d %02d  ", (int)(mc.size+1), (int)((mc.size+2)*0.5));
             //mc.refine(scales[0], true);
             //mc.p = (mc.p-Point2f(1.0,1.0))*0.5;
           //printf("%.2fx%.2f\n", mc.p.x, mc.p.y);
-	  (*allcorners[j])[i].p = mc.p;
+          (*allcorners[j])[i].p = mc.p;
+          if (use_rgb) {
+            Point2f merge = mc.p;
+            //green
+            mc.refine_gradient(channels[1], 1.0);
+            (*allcorners[j])[i].pc[1] = mc.p;
+            mc.p = merge;
+            //blue
+            mc.refine_gradient(channels[0], 1.0);
+            (*allcorners[j])[i].pc[2] = mc.p;
+            mc.p = merge;
+            //red
+            mc.refine_gradient(channels[2], 1.0);
+            (*allcorners[j])[i].pc[0] = mc.p;
+            mc.p = merge;
+          }
 	  
 	  
 #pragma omp critical 

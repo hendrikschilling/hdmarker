@@ -8,7 +8,7 @@
 
 class Marker_Corner {
 public :
-  cv::Point2f p, dir[2];
+  cv::Point2f p, dir[2], pc[3];
   int mask;
   float size;
   float size_x, size_y;
@@ -47,7 +47,7 @@ public :
 
 class Corner {
 public :
-  cv::Point2f p;
+  cv::Point2f p, pc[3];
   cv::Point2i id;
   int page;
   float size;
@@ -60,6 +60,9 @@ public :
   Corner(cv::Point2f cp, cv::Point2i cid, int cpage)
   {
     p = cp;
+    pc[0] = cp;
+    pc[1] = cp;
+    pc[2] = cp;
     id = cid;
     page = cpage;
   }
@@ -67,6 +70,9 @@ public :
   Corner(Marker_Corner &c)
   {
     p = c.p;
+    pc[0] = c.pc[0];
+    pc[1] = c.pc[1];
+    pc[2] = c.pc[2];
     id = c.coord;
     page = c.page;
     size = c.size;
@@ -75,6 +81,9 @@ public :
   Corner *operator=(Corner c)
   {
     p = c.p;
+    pc[0] = c.pc[0];
+    pc[1] = c.pc[1];
+    pc[2] = c.pc[2];
     id = c.id;
     page = c.page;
     size = c.size;
@@ -118,7 +127,7 @@ class Marker {
     //static void detect(cv::Mat &img, std::vector<Corner> &corners);
     //static void detect_minscale(cv::Mat &img, cv::Mat &paint, std::vector<Corner> &corners, int scale_min = 8);
     static void detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_max = 0, int marker_size_min = 5, float effort = 0.5, int mincount = 10, std::vector<cv::Mat> *scales = NULL);
-    static void detect(cv::Mat &img, std::vector<Corner> &corners, int marker_size_max = 0, int marker_size_min = 5, float effort = 0.5, int mincount = 10);
+    static void detect(cv::Mat img, std::vector<Corner> &corners, bool use_rgb = false, int marker_size_max = 0, int marker_size_min = 5, float effort = 0.5, int mincount = 10);
     static void detect_minscale(cv::Mat &img, cv::Mat &paint, std::vector<Corner> &corners, int scale_min = 8);
 };
 
