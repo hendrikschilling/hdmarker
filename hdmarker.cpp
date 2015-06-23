@@ -80,6 +80,7 @@ const float marker_dir_corner_dist_max = 0.25;
 const float marker_corner_dir_rad_dist = M_PI/16*1.1;
 const float detection_scale_min = 0.5;
 const int post_detection_range = 5;
+const float corner_score_oversampling = 2;
 
 uint16_t corner_patt_x_b[24];
 uint16_t corner_patt_y_b[24];
@@ -688,13 +689,13 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
 	      if (fabs(a-b) < M_PI*min_angle || fabs(a-b) > M_PI*(1.0-min_angle))
 		continue;
 	      
-	      test_dir[0].x = corner_score_size*cos(a);
-	      test_dir[0].y = corner_score_size*sin(a);
-	      test_dir[1].x = corner_score_size*cos(b);
-	      test_dir[1].y = corner_score_size*sin(b);
+	      test_dir[0].x = size*cos(a);
+	      test_dir[0].y = size*sin(a);
+	      test_dir[1].x = size*cos(b);
+	      test_dir[1].y = size*sin(b);
 	      
               
-	      test_score = scoreCorner(img, p, test_dir, size, dead);
+	      test_score = scoreCorner(img, p, test_dir, corner_score_oversampling*size, corner_score_oversampling*dead);
               //printf("dir score %f == %f -> %f\n", scoreCorner(img, p, dir), score, test_score);
 	      if (test_score > score) {
                 //printf("yay better %f!\n", test_score);
@@ -909,7 +910,12 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
       
       refined = true;
 
-      score = scoreCorner(img, p, dir, size, dead);
+      dir[0].x = size*cos(dir_rad[0]);
+      dir[0].y = size*sin(dir_rad[0]);
+      dir[1].x = size*cos(dir_rad[1]);
+      dir[1].y = size*sin(dir_rad[1]);
+      
+      score = scoreCorner(img, p, dir, corner_score_oversampling*size, corner_score_oversampling*dead);
       
       for(step=refine_max;step>=refine_min_step;step*=0.5) {
 	change = true;
@@ -923,10 +929,10 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
 	      else
 		c.p.y +=sign*step;
 	      
-	      if (c.p.x <= 2*corner_score_size || c.p.y <= 2*corner_score_size || c.p.x >= img.size().width-2*corner_score_size || c.p.y >= img.size().height-2*corner_score_size) 
+	      if (c.p.x <= 2*size || c.p.y <= 2*size || c.p.x >= img.size().width-2*size || c.p.y >= img.size().height-2*size) 
 		continue;
 	      
-	      c.score = scoreCorner(img, c.p, c.dir, size, dead);
+	      c.score = scoreCorner(img, c.p, c.dir, corner_score_oversampling*size, corner_score_oversampling*dead);
 	      if (dir_step_refine)
  		c.refineDirIterative_size(img, dir_step_refine, dir_step_refine, size, dead);
               
@@ -4224,8 +4230,8 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
               mc.estimated = false;
 	      mc.p = mc.p*(1.0/sd);
 	      //mc.estimateDir(scales[s]);
-	      //mc.refine(scales[s], true);
-              mc.refine_size(scales[s], 1.0, true , 0, (mc.size+1.5)/sd, (mc.size+1.5)*0.5);
+	      mc.refine(scales[s], true);
+              mc.refine_size(scales[s], 1.0, true , 0, (mc.size)/sd/3, (mc.size)/sd/6);
 	      mc.p = mc.p*sd;
 	    }
             mc.refined = false;
@@ -4233,7 +4239,7 @@ void Marker::detect(Mat &img, vector<Corner> &corners, int marker_size_max, int 
             mc.estimated = false;
             mc.p = mc.p*2.0+Point2f(1.0,1.0);
             //mc.estimateDir(scales[s]);
-            mc.refine_size(scales[0], 1.0, true , 0, (mc.size+1.5), (mc.size+1.5)*0.5);
+            mc.refine_size(scales[0], 1.0, true , 0, mc.size/3, mc.size/6);
             //printf("%02d %02d  ", (int)(mc.size+1), (int)((mc.size+2)*0.5));
             //mc.refine(scales[0], true);
             mc.p = (mc.p-Point2f(1.0,1.0))*0.5;
