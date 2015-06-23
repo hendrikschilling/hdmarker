@@ -1039,7 +1039,7 @@ void Marker_Corner::cornerSubPixCPMask( InputArray _image, Point2f &p,
       {
           float x = (float)(j - win.width)/win.width;
           mask[i * win_w + j] = (float)(vy*std::exp(-x*x))*1.0/max(min(ldist(m, d1, Point2f(i, j)), ldist(m, d2, Point2f(i, j))), (float)1.0);
-          if (ldist(m, d1, Point2f(i, j)) >= size/10 && ldist(m, d2, Point2f(i, j)) >= size/10)
+          if (ldist(m, d1, Point2f(i, j)) > size/10 && ldist(m, d2, Point2f(i, j)) > size/10)
             mask[i*win_w+j] = 0;
       }
   }

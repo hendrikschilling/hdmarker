@@ -127,6 +127,63 @@ void check_calibration(vector<Corner> &corners, int w, int h, Mat &img)
   imwrite("off_ocv.png", paint);
 }
 
+
+void check_precision(vector<Corner> &corners, int w, int h, Mat &img, const char *ref)
+{
+  vector<Mat> rvecs, tvecs;
+  Mat cameraMatrix(3,3,cv::DataType<double>::type);
+  Mat distCoeffs;
+  double rms;
+  vector<Point2f> projected;
+  Mat paint;
+  Mat refimg = imread(ref, CV_LOAD_IMAGE_GRAYSCALE);
+  
+  vector<vector<Point3f>> world_points(1);
+  vector<vector<Point2f>> img_points(1);
+  
+  if (!calib_savepoints(img_points, world_points, corners, grid_width, grid_height)) {
+    return;
+  }
+  
+  distCoeffs = Mat::zeros(1, 8, CV_64F);
+  rms = calibrateCamera(world_points, img_points, Size(w, h), cameraMatrix, distCoeffs, rvecs, tvecs, CV_CALIB_RATIONAL_MODEL);
+  printf("rms %f with full distortion correction\n", rms);
+    
+  projectPoints(world_points[0], rvecs[0], tvecs[0], cameraMatrix, distCoeffs, projected);
+  cvtColor(img, paint, CV_GRAY2BGR);
+  for(int i=0;i<projected.size();i++) {
+    Point2f d = projected[i] - img_points[0][i];
+    line(paint, img_points[0][i], img_points[0][i]+100*d, Scalar(0,0,255));
+  }
+  imwrite("off_hdm.png", paint);
+  
+  cornerSubPix(refimg, img_points[0], Size(6,6), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
+  
+  distCoeffs = Mat::zeros(1, 8, CV_64F);
+  rms = calibrateCamera(world_points, img_points, Size(w, h), cameraMatrix, distCoeffs, rvecs, tvecs, CV_CALIB_RATIONAL_MODEL);
+  printf("rms %f with full distortion correction, opencv cornerSubPix\n", rms);
+  
+  projectPoints(world_points[0], rvecs[0], tvecs[0], cameraMatrix, distCoeffs, projected);
+  cvtColor(img, paint, CV_GRAY2BGR);
+  for(int i=0;i<projected.size();i++) {
+    Point2f d = projected[i] - img_points[0][i];
+    line(paint, img_points[0][i], img_points[0][i]+100*d, Scalar(0,0,255));
+  }
+  imwrite("off_ocv.png", paint);
+}
+
+void corrupt(Mat &img)
+{
+  GaussianBlur(img, img, Size(9,9), 0);
+  Mat noise = Mat(img.size(), CV_32F);
+  img. convertTo(img, CV_32F);
+  randn(noise, 0, 3.0);
+  img += noise;
+  img.convertTo(img, CV_8U);
+  cvtColor(img, img, COLOR_BayerRG2BGR_VNG);
+  cvtColor(img, img, CV_BGR2GRAY);
+}
+
 int main(int argc, char* argv[])
 {
   microbench_init();
@@ -137,12 +194,13 @@ int main(int argc, char* argv[])
   vector<Corner> corners;
   Corner c;
   
-  if (argc != 3 && argc != 4)
-    usage(argv[0]);
+  /*if (argc != 3 && argc != 4)
+    usage(argv[0]);*/
   
   img = cv::imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
   paint = cv::imread(argv[1]);
-  
+  corrupt(img);
+  imwrite("corrupted.png", img);
   Marker::init();
   
   microbench_measure_output("app startup");
@@ -169,6 +227,7 @@ int main(int argc, char* argv[])
   }
   
   check_calibration(corners, img.size().width, img.size().height, img);
+  //check_precision(corners, img.size().width, img.size().height, img, argv[3]);
   
   imwrite(argv[2], paint);
   
