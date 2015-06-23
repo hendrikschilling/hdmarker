@@ -1456,10 +1456,13 @@ double pattern_score(Mat patt)
 	c[i] = corners[i];
         v = corners[(i+3)%4].p-corners[i].p;
         mindist = sqrt(v.x*v.x+v.y*v.y);
+        c[i].dir_rad[1] = atan2(v.y, v.x);
         v = corners[i].p-corners[(i+1)%4].p;
         mindist += sqrt(v.x*v.x+v.y*v.y);
+        c[i].dir_rad[0] = atan2(v.y, v.x);
         c[i].size = mindist+0.5;
       }
+      
       
       if (id % 2 == 0) {
 	c[1].coord.x = id % 32+1;
