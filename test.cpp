@@ -231,8 +231,8 @@ int main(int argc, char* argv[])
   vector<Corner> corners;
   Corner c;
   
-  /*if (argc != 3 && argc != 4)
-    usage(argv[0]);*/
+  if (argc != 3 && argc != 4)
+    usage(argv[0]);
   
   img = cv::imread(argv[1]);
   paint = cv::imread(argv[1]);

@@ -1047,7 +1047,7 @@ void Marker_Corner::cornerSubPixCPMask( InputArray _image, Point2f &p,
       }
   }
   
-  imwrite("mask.png", maskm*256);
+  //imwrite("mask.png", maskm*256);
 
   // make zero_zone
   if( zeroZone.width >= 0 && zeroZone.height >= 0 &&
