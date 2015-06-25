@@ -10,8 +10,14 @@
 #include <string.h>
 #include <time.h>
 
+#include <tclap/CmdLine.h>
+
 using namespace cv;
 using namespace std;
+
+const int recursive_markers = 1;
+const int subsampling = 1;
+const int ss_border = 2;
 
 void setnumber(Mat &m, int n)
 {
@@ -67,6 +73,41 @@ void writemarker(Mat &img, int page, int offx = 0, int offy = 0)
     }
 }
 
+void checker_recurse(Mat &img, Mat &checker)
+{
+  Mat hr;
+  int w = img.size().width;
+  int h = img.size().height;
+  int ws = subsampling+2*ss_border;
+  int w_hr = w*ws;;
+  uint8_t *ptr_hr, *ptr_img;
+  
+  if (!recursive_markers) {
+    checker = img;
+    return;
+  }
+  
+  resize(img, hr, Point2i(img.size())*ws, 0, 0, INTER_NEAREST);
+  
+  ptr_img = img.ptr<uchar>(0);
+  ptr_hr = hr.ptr<uchar>(0);
+  
+  for(int y=0;y<h;y++)
+    for(int x=0;x<w;x++) {
+      for(int j=ss_border;j<ws-ss_border;j++)
+        for(int i=j%2+ss_border;i<ws-ss_border;i+=2)
+          ptr_hr[(y*ws+j)*w_hr+x*ws+i] = 255-ptr_hr[(y*ws+j)*w_hr+x*ws+i];
+    }
+    
+  checker = hr;
+}
+
+void checker_add_recursive(Mat &img, Mat &checker)
+{
+  for(int i=0;i<recursive_markers;i++)
+    checker_recurse(img, img);
+}
+
 int main(int argc, char* argv[])
 {
   int page = atoi(argv[1]); 
@@ -76,6 +117,7 @@ int main(int argc, char* argv[])
     img += 255;
     writemarker(img, page);
     //resize(img, img, Size(16*10*8, 16*10*8), 0, 0, INTER_NEAREST);
+    checker_add_recursive(img, img);
     imwrite(argv[2], img);
   }
   else if (argc == 5) {
@@ -88,7 +130,8 @@ int main(int argc, char* argv[])
     for(int j=0;j<h;j++)
       for(int i=0;i<w;i++)
 	writemarker(img, page+j*w+i, 32*5*i, 32*5*j);
-    //resize(img, img, Size(w*32*5*1, h*32*5*1), 0, 0, INTER_NEAREST);
+    //resize(img, img, Size(w*32*5*1, h*32*5*1), 0, 0, INTER_NEAREST); 
+    checker_add_recursive(img, img);
     imwrite(argv[4], img);
   }
 
