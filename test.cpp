@@ -79,7 +79,7 @@ bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<
   }
   
   inliers.resize(world_points_check.size());
-  findHomography(world_points_check, img_points_check[0], CV_RANSAC, 200, inliers);
+  findHomography(world_points_check, img_points_check[0], CV_RANSAC, 10, inliers);
   
   for(uint i=0;i<inliers.size();i++) {
     if (!inliers[i])
@@ -143,6 +143,8 @@ void check_calibration(vector<Corner> &corners, int w, int h, Mat &img)
   if (use_rgb)
     for(int c=1;c<4;c++)
       img_points[c].resize(1);
+    
+  printf("corners: %d\n", corners.size());
     
   if (!calib_savepoints(img_points, world_points, corners, grid_width, grid_height)) {
     return;
@@ -312,8 +314,9 @@ struct Gauss2dError {
     x2 = x2*x2;
     y2 = y2*y2;
     //want to us sqrt(x2+y2)+T(1.0) but leads to invalid jakobian?
-    T d = sqrt(x2+y2+T(1.0));
-    residuals[0] = (T(val_) - p[5] - p[2]*exp(-(x2/sx2+y2/sy2)))/d;
+    //T d = sqrt(x2+y2+T(1.0));
+    //non-weighted leads to better overall estimates?
+    residuals[0] = (T(val_) - p[5] - p[2]*exp(-(x2/sx2+y2/sy2)));
     
     return true;
   }
@@ -393,7 +396,13 @@ double fit_gauss(Mat &img, double *params)
   
   //std::cout << summary.FullReport() << "\n";
   
-  return sqrt(summary.final_cost/problem_gauss.NumResiduals());
+  if (summary.termination_type == ceres::CONVERGENCE)
+    return sqrt(summary.final_cost/problem_gauss.NumResiduals());
+  else {
+    //std::cout << summary.FullReport() << "\n";
+    //printf("%f\n",sqrt(summary.final_cost/problem_gauss.NumResiduals()));
+    return FLT_MAX;
+  }
 }
 
 void draw_gauss(Mat &img, double *p)
@@ -415,7 +424,7 @@ void draw_gauss(Mat &img, double *p)
     }
 }
 
-void detect_sub_corners(Mat &img, vector<Corner> corners)
+void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, Mat &paint)
 {
   sort(corners.begin(), corners.end(), corner_cmp);
   
@@ -423,6 +432,7 @@ void detect_sub_corners(Mat &img, vector<Corner> corners)
   vector<Point2f> cpoints(4);
   
   for(int i=0;i<corners.size();i++) {
+    printf("."); fflush(NULL);
     Mat proj;
     Corner c = corners[i];
     int size;
@@ -444,14 +454,14 @@ void detect_sub_corners(Mat &img, vector<Corner> corners)
         maxlen = len;
     }
     maxlen = sqrt(maxlen);
-    printf("longest side %f\n", maxlen);
+    //printf("longest side %f\n", maxlen);
     
-    if (maxlen < 5*4)
+    if (maxlen < 5*5)
       continue;
     
     size = maxlen*subfit_oversampling/5;
     
-    proj = Mat(size, size, CV_8U);
+#pragma omp parallel for
     for(int y=0;y<5;y++)
       for(int x=0;x<5;x++) {
         cpoints[0] = Point2f(-x*size,-y*size);
@@ -459,7 +469,9 @@ void detect_sub_corners(Mat &img, vector<Corner> corners)
         cpoints[2] = Point2f((5-x)*size,(5-y)*size);
         cpoints[3] = Point2f(-x*size,(5-y)*size);
         
+        proj = Mat(size, size, CV_8U);
         Mat pers = getPerspectiveTransform(ipoints, cpoints);
+        Mat pers_i = getPerspectiveTransform(cpoints, ipoints);
         warpPerspective(img, proj, pers, Size(size, size), INTER_LINEAR);
         Mat oned;
         resize(proj, oned, Size(size, 1), INTER_AREA);
@@ -469,13 +481,26 @@ void detect_sub_corners(Mat &img, vector<Corner> corners)
         //imwrite(buf, proj);
         double params[6];
         double rms = fit_gauss(proj, params);
+        if (rms >= 5.0)
+          continue;
         //draw_gauss(proj, params);
         //sprintf(buf, "point%07d_%0d_%d_fit.png", i, x, y);
         //imwrite(buf, proj);
         //printf("refined position for %d %d %d: %fx%f, rms %f a %f\n", i, x, y, params[0], params[1], rms, params[2]);
+        vector<Point2f> coords(1);
+        coords[0] = Point2f(params[0], params[1]);
+        vector<Point2f> res(1);
+        perspectiveTransform(coords, res, pers_i);
+        circle(paint, Point2i(res[0].x*16.0, res[0].y*16.0), 1, Scalar(0,255,0,0), 2, CV_AA, 4);
+        
+        Corner c_o(res[0], Point2i(c.id.x*10+2*x+1, c.id.y*10+2*y+1), 0);
+        //printf("found corner %f!\n", rms);
+#pragma omp critical
+        corners_out.push_back(c_o);
       }
 
   }
+  printf("\n");
 }
 
 void corrupt(Mat &img)
@@ -509,12 +534,16 @@ int main(int argc, char* argv[])
   imwrite("corrupted.png", img);
   Marker::init();
   
+  //FIXME hack - remove detection problems
+  Mat pre;
+  GaussianBlur(img, pre, Size(5,5), 0);
+  
   microbench_measure_output("app startup");
   //CALLGRIND_START_INSTRUMENTATION;
   if (argc == 4)
-    Marker::detect(img, corners,use_rgb,0,0,atof(argv[3]),100);
+    Marker::detect(pre, corners,use_rgb,0,0,atof(argv[3]),100);
   else
-    Marker::detect(img, corners,use_rgb,0,0,0.5);
+    Marker::detect(pre, corners,use_rgb,0,0,0.5);
   //CALLGRIND_STOP_INSTRUMENTATION;
     
   microbench_init();
@@ -540,7 +569,11 @@ int main(int argc, char* argv[])
     cvtColor(img, gray, CV_BGR2GRAY);
   else
     gray = img;
-  detect_sub_corners(gray , corners);
+  
+  vector<Corner> corners_sub; 
+  detect_sub_corners(gray , corners, corners_sub, paint);
+  
+  check_calibration(corners_sub, img.size().width, img.size().height, img);
   
   imwrite(argv[2], paint);
   
