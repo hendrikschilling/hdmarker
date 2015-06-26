@@ -539,7 +539,7 @@ int main(int argc, char* argv[])
   
   //FIXME hack - remove detection problems
   Mat pre;
-  GaussianBlur(img, pre, Size(25,25), 0);
+  GaussianBlur(img, pre, Size(5,5), 0);
   
   microbench_measure_output("app startup");
   //CALLGRIND_START_INSTRUMENTATION;
@@ -574,11 +574,11 @@ int main(int argc, char* argv[])
   else
     gray = img;
   
-  vector<Corner> corners_sub; 
-  detect_sub_corners(gray , corners_f, corners_sub, paint);
+  //vector<Corner> corners_sub; 
+  //detect_sub_corners(gray , corners_f, corners_sub, paint);
   
-  vector<Corner> corners_f3;
-  check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f3);
+  //vector<Corner> corners_f3;
+  //check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f3);
   
   imwrite(argv[2], paint);
   

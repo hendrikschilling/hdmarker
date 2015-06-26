@@ -17,8 +17,8 @@
 #endif
 
 //#define WRITE_PROJECTED_IDS
-//#define PAINT_CANDIDATE_CORNERS
-//#define DEBUG_SAVESTEPS
+#define PAINT_CANDIDATE_CORNERS
+#define DEBUG_SAVESTEPS
 //#define USE_SLOW_CORNERs
 
 /*
@@ -81,6 +81,9 @@ const float marker_corner_dir_rad_dist = M_PI/16*1.1;
 const float detection_scale_min = 0.5;
 const int post_detection_range = 5;
 const float corner_score_oversampling = 1;
+const int border = marker_maxsize*2;
+
+const Point2f b_o(border, border);
 
 uint16_t corner_patt_x_b[24];
 uint16_t corner_patt_y_b[24];
@@ -465,9 +468,9 @@ static inline int warp_getpoints_x8(uchar *srcptr, int w, Point2f c, Point2f d1,
       int white = 0, black = 0, wh = 0, bl = 0;
       vector<Point2f> test_corners(3);
       
-      test_corners[0] = p+dir[0]-dir[1];
-      test_corners[1] = p+dir[0]+dir[1];
-      test_corners[2] = p-dir[0]+dir[1];
+      test_corners[0] = p+dir[0]-dir[1]+b_o;
+      test_corners[1] = p+dir[0]+dir[1]+b_o;
+      test_corners[2] = p-dir[0]+dir[1]+b_o;
       
       int w = img.size().width;
       Point2f d1, d2;
@@ -518,9 +521,9 @@ static inline int warp_getpoints_x8(uchar *srcptr, int w, Point2f c, Point2f d1,
       int white = 0, black = 0, wh = 0, bl = 0;
       vector<Point2f> test_corners(3);
       
-      test_corners[0] = p+dir[0]-dir[1];
-      test_corners[1] = p+dir[0]+dir[1];
-      test_corners[2] = p-dir[0]+dir[1];
+      test_corners[0] = p+dir[0]-dir[1]+b_o;
+      test_corners[1] = p+dir[0]+dir[1]+b_o;
+      test_corners[2] = p-dir[0]+dir[1]+b_o;
       
       int w = img.size().width;
       Point2f d1, d2;
@@ -1614,7 +1617,7 @@ double pattern_score(Mat patt)
       for(int i=0;i<4;i++) {
 	//corners[i].estimateDir(img);
 	//corners[i].refine(img);
-	points[i] = corners[i].p;
+	points[i] = corners[i].p+b_o;
       }
       
       pers = getPerspectiveTransform(points, box_corners_pers);
@@ -1889,15 +1892,16 @@ static inline float dir_rad_diff(float rada, float radb)
       corners[2].scale = scale;
       corners[3].scale = scale;
       
-      points[0] = corners[0].p;
-      points[1] = corners[1].p;
-      points[2] = corners[2].p;
-      points[3] = corners[3].p;
+      points[0] = corners[0].p+b_o;
+      points[1] = corners[1].p+b_o;
+      points[2] = corners[2].p+b_o;
+      points[3] = corners[3].p+b_o;
       
       pers = getPerspectiveTransform(points, box_corners_pers);
       warpPerspective(img, input, pers, Size(9, 9), INTER_LINEAR);
       
       id = masktoid(calcId(input));
+      //printf("found id %d\n", id);
       if (inid != -1 && id != inid) {
 	id = -1;
 	page = -1;
@@ -2244,263 +2248,6 @@ static inline float snorm(Point2f p)
   return p.x*p.x+p.y*p.y;
 }
 
-void detect_marker_orig(Marker_Corner *start, Mat harry, Gridstore &candidates, vector<Marker> &markers, Mat img, Mat smallblur, int scale)
-{
-  Marker marker;
-  vector<Point2f> last_corner;
-  Mat box(Size(9, 9), CV_8UC1), affine, best_affine, best_box;
-  vector<Marker_Corner*> corners;
-  vector<Marker_Corner*> test_corners;
-  double score, best_score;
-  double direction;
-  //int paintx = (markers.size() % (paint.size().width/24))*24, painty = (markers.size() / (paint.size().width/24))*24;
-  vector<Marker_Corner*> best_corners;
-  vector<Point2f> test_points;
-  
-  Point2f d1, d2;
-  float l1, l2;
-  
-  test_points.resize(3);
-  
-  test_corners.resize(3);
-  best_corners.resize(3);
-  last_corner.resize(1);
-  
-  test_corners[0] = start;
-  if (!(start->mask & 1))
-    return;
-  
-  /*for(int j1=max((int)start.y-marker_maxsize, 0);j1<min((int)start.y+marker_maxsize, harry.size().height);j1++)
-    for(int i1=max((int)start.x-marker_maxsize, 0);i1<min((int)start.x+marker_maxsize, harry.size().width);i1++)
-      if (harry.at<float>(j1, i1) >= 1.0)
-	corners.push_back(Point2f(i1, j1));*/
-  
-  //FIXME bug in gridstore?
-  vector<void*> allcorners = candidates.getWithin(start->p, marker_maxsize);
-  
-  for (uint32_t i=0;i<allcorners.size();i++) {
-    Point2f v = start->p-((Marker_Corner*)allcorners[i])->p;
-    float l = v.x*v.x+v.y*v.y;
-    if (l >= marker_maxsize*1.5*marker_maxsize*1.5)
-      continue;
-    if (l < marker_minsize*marker_minsize)
-      continue;
-    corners.push_back((Marker_Corner*)allcorners[i]);
-  }
-    
-  best_score = 0.0;
-  for(uint32_t s1=0;s1<corners.size();s1++) {
-    for(uint32_t s2=s1+1;s2<corners.size();s2++) {
-      /*if (dir*pattern_prescore(smallblur, corners[s1], corners[s2]) < bigblur.at<uchar>(start)/5)
-	continue;*/
-      
-      test_corners[1] = corners[s1];
-      test_corners[2] = corners[s2];
-      
-      d2 = test_corners[2]->p-test_corners[1]->p;
-      l2 = d2.x*d2.x+d2.y*d2.y;
-      
-      if (l2 >= marker_maxsize*marker_maxsize || l2 < marker_minsize*marker_minsize)
-	continue;
-      
-      //test three corners
-      Point2f A = test_corners[1]->p - test_corners[0]->p;
-      Point2f B = test_corners[2]->p - test_corners[0]->p;
-      direction = A.cross(B);
-      
-      if (abs(direction) < marker_minsize*marker_minsize || abs(direction) > marker_maxsize*marker_maxsize)
-	continue;
-      
-      if (direction > 0) {
-	test_corners[1] = corners[s2];
-	test_corners[2] = corners[s1];
-      }
-      
-      if (!(test_corners[1]->mask & 2))
-	continue; 
-      if (!(test_corners[2]->mask & 4))
-	continue;
-      
-      d1 = test_corners[1]->p-test_corners[0]->p;
-      l1 = d1.x*d1.x+d1.y*d1.y;
-      
-    if (l1 >= marker_maxsize*marker_maxsize || l1 < marker_minsize*marker_minsize)
-	continue;
-      
-    if (norm(start->dir[0]-test_corners[2]->dir[0]) > marker_corner_dir_dist_max && norm(start->dir[0]+test_corners[2]->dir[0]) > marker_corner_dir_dist_max)
-      continue;
-    if (norm(start->dir[1]-test_corners[2]->dir[1]) > marker_corner_dir_dist_max && norm(start->dir[1]+test_corners[2]->dir[1]) > marker_corner_dir_dist_max)
-      continue;
-    
-    /*if (norm(start->dir[0]-test_corners[1]->dir[1]) > marker_corner_dir_dist_max2 && norm(start->dir[0]+test_corners[1]->dir[1]) > marker_corner_dir_dist_max2)
-      continue;
-    if (norm(start->dir[1]-test_corners[1]->dir[0]) > marker_corner_dir_dist_max2 && norm(start->dir[1]+test_corners[1]->dir[0]) > marker_corner_dir_dist_max2)
-      continue;*/
-    
-    Point2f dira, dirb;
-    
-    dira = start->dir[0];
-    dirb = start->dir[1];
-    
-    if (snorm(dira-test_corners[2]->dir[0]) <= snorm(dira+test_corners[2]->dir[0]))
-      dira += test_corners[2]->dir[0];
-    else
-      dira -= test_corners[2]->dir[0];
-    
-    if (snorm(dira*0.5-test_corners[1]->dir[1]) <= snorm(dira*0.5+test_corners[1]->dir[1]))
-      dira += test_corners[1]->dir[1];
-    else
-      dira -= test_corners[1]->dir[1];
-    
-    if (snorm(dirb-test_corners[2]->dir[1]) <= snorm(dirb+test_corners[2]->dir[1]))
-      dirb += test_corners[2]->dir[1];
-    else
-      dirb -= test_corners[2]->dir[1];
-    
-    if (snorm(dirb*0.5-test_corners[1]->dir[0]) <= snorm(dirb*0.5+test_corners[1]->dir[0]))
-      dirb += test_corners[1]->dir[0];
-    else
-      dirb -= test_corners[1]->dir[0];
-    
-    dira *= 1.0/3.0;
-    dirb *= 1.0/3.0;
-    
-    if (min(snorm(dira-start->dir[0]),snorm(dira+start->dir[0])) > marker_corner_dir_dist_max*marker_corner_dir_dist_max)
-      continue;
-    if (min(snorm(dira-test_corners[2]->dir[0]),snorm(dira+test_corners[2]->dir[0])) > marker_corner_dir_dist_max*marker_corner_dir_dist_max)
-      continue;
-    if (min(snorm(dira-test_corners[1]->dir[1]),snorm(dira+test_corners[1]->dir[1])) > marker_corner_dir_dist_max*marker_corner_dir_dist_max)
-      continue;
-    
-    if (min(snorm(dirb-start->dir[1]),snorm(dirb+start->dir[1])) > marker_corner_dir_dist_max*marker_corner_dir_dist_max)
-      continue;
-    if (min(snorm(dirb-test_corners[2]->dir[1]),snorm(dirb+test_corners[2]->dir[1])) > marker_corner_dir_dist_max*marker_corner_dir_dist_max)
-      continue;
-    if (min(snorm(dirb-test_corners[1]->dir[0]),snorm(dirb+test_corners[1]->dir[0])) > marker_corner_dir_dist_max*marker_corner_dir_dist_max)
-      continue;
-    
-    dira = dira * (1.0/norm(dira));
-    dirb = dirb * (1.0/norm(dirb));
-        
-    d1 = d1 * (1.0/norm(d1));
-    d2 = d2 * (1.0/norm(d2));
-    
-    if (min(snorm(dira-d1),snorm(dira+d1)) > marker_dir_corner_dist_max*marker_dir_corner_dist_max)
-      continue;
-    if (min(snorm(dirb-d2),snorm(dirb+d2)) > marker_dir_corner_dist_max*marker_dir_corner_dist_max)
-      continue;
-
-    //FIXME broken?
-    if (pattern_prescore(smallblur, test_corners[0]->p, test_corners[1]->p) < prescore_marker_limit)
-      continue;
-    if (pattern_prescore(smallblur, test_corners[1]->p, test_corners[2]->p) < prescore_marker_limit)
-      continue;
-    if (pattern_prescore(smallblur, test_corners[2]->p, test_corners[2]->p + test_corners[1]->p - test_corners[0]->p)  < prescore_marker_limit)
-      continue;
-    
-      double x21, x10, y21, y10;
-      double d;
-      x21 = test_corners[1]->p.x - test_corners[0]->p.x;
-      x10 = test_corners[0]->p.x - test_corners[2]->p.x;
-      y21 = test_corners[1]->p.y - test_corners[0]->p.y;
-      y10 = test_corners[0]->p.y - test_corners[2]->p.y;
-      
-      d = (x21*y10 - x10*y21)*(x21*y10 - x10*y21) / (x21*x21 + y21*y21);
-      if (d < marker_minsize*marker_minsize || d > marker_maxsize*marker_maxsize)
-	continue;
-      
-      /*last_corner[0] = test_corners[2].p + (test_corners[1].p - start.p);
-      cornerSubPix(img, last_corner, cvSize (scale+1, scale+1), cvSize (-1, -1), cvTermCriteria (CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 3, 0.1));
-      if (pattern_prescore(smallblur, last_corner[0], start.p)  < 0.0)
-	continue;*/
-
-      /*test_points[0] = test_corners[0]->p;
-      test_points[1] = test_corners[1]->p;
-      test_points[2] = test_corners[2]->p;
-      affine = getAffineTransform(test_points, box_corners);
-      warpAffine(img, box, affine, Size(9, 9), INTER_LINEAR);*/
-      
-      Point2f d1, d2;
-      d1 = (test_corners[1]->p - test_corners[2]->p)*0.4;
-      d2 = (test_corners[1]->p - test_corners[0]->p)*0.4;
-      
-      test_points[0] = test_corners[0]->p+d1-d2;
-      test_points[1] = test_corners[1]->p+d1+d2;
-      test_points[2] = test_corners[2]->p-d1+d2;
-      
-      simplewarp_bilin(img, box, test_points, 9);
-      
-      score = pattern_score(box);
-
-      if (score > best_score) {
-	best_score = score;
-	affine.copyTo(best_affine);
-	best_corners = test_corners;
-	box.copyTo(best_box);
-	if (best_score > pattern_score_early)
-	  goto finish;
-      }
-    }
-  }
-  
-  finish :
-  
-  if (best_score > pattern_score_ok) {
-    //FIXME synchronise?!
-    best_corners[0]->refine(img);
-    best_corners[1]->refine(img);
-    best_corners[2]->refine(img);
-    if (scale)
-      marker = Marker(best_box, img, best_score, best_corners[0], best_corners[1], best_corners[2], scale);
-    else
-      marker = Marker(best_box, img, best_score, best_corners[0], best_corners[1], best_corners[2], 0.5);
-    assert(marker.neighbours == 0);
-    //marker.refine(img);
-    if (marker.score > pattern_score_good && marker.id != -1) { 
-	//marker.corners[0].refine(img);
-	//marker.corners[1].refine(img);
-#pragma omp critical
-      {
-	bool valid = true;
-      for(int i=0;i<markers.size();i++)
-	if (replace_overlapping) {
-	    if (markers[i].id == marker.id && markers[i].page == marker.page) {
-	      if (norm(markers[i].corners[0].p - marker.corners[0].p) > 2*(scale+1)) {
-		valid = false;
-		//keep only highest rated one!
-		//FIXME what if this one has already valid number of neighbours?!
-		//markers[i].neighbours = -1000000000;
-		//cout << "duplicate at different position! " << marker.id << endl;
-		if (markers[i].score < marker.score)
-		  markers[i] = marker;
-		break;
-	      }
-	      else {
-		//FIXME something breaks here! Maybe filtering? (check test.jpg)
-		//cout << "duplicate at similar position! " << marker.id << endl; 
-		valid = false;
-		//use higher scale if found
-		if (markers[i].score < marker.score)
-		  markers[i] = marker; 
-	      }
-	    }
-	  }
-	if (valid) {
-	  if (scale)
-	    marker.filter(&candidates, markers, scale);
-	  else
-	    marker.filter(&candidates, markers, 0.5);
-	  markers.push_back(marker);
-	  //printf("c1: %f %f\n",
-	  //dir_rad_diff(marker.corners[0].dir_rad[0], marker.corners[1].dir_rad[1]),
-	  //dir_rad_diff(marker.corners[0].dir_rad[1], marker.corners[1].dir_rad[0]));
-	}
-      }
-    }
-  }
-    
-}
-
 void detect_marker(Marker_Corner *start, Mat harry, Gridstore &candidates, vector<Marker> &markers, Mat img, Mat smallblur, int scale)
 {
   Marker marker;
@@ -2649,12 +2396,12 @@ void detect_marker(Marker_Corner *start, Mat harry, Gridstore &candidates, vecto
       continue;
 
     //FIXME broken?
-    if (pattern_prescore(smallblur, test_corners[0]->p, test_corners[1]->p) < prescore_marker_limit)
+    /*if (pattern_prescore(smallblur, test_corners[0]->p, test_corners[1]->p) < prescore_marker_limit)
       continue;
     if (pattern_prescore(smallblur, test_corners[1]->p, test_corners[2]->p) < prescore_marker_limit)
       continue;
     if (pattern_prescore(smallblur, test_corners[2]->p, test_corners[2]->p + test_corners[1]->p - test_corners[0]->p)  < prescore_marker_limit)
-      continue;
+      continue;*/
     
       double x21, x10, y21, y10;
       double d;
@@ -2682,9 +2429,9 @@ void detect_marker(Marker_Corner *start, Mat harry, Gridstore &candidates, vecto
       d1 = (test_corners[1]->p - test_corners[2]->p)*0.4;
       d2 = (test_corners[1]->p - test_corners[0]->p)*0.4;
       
-      test_points[0] = test_corners[0]->p+d1-d2;
-      test_points[1] = test_corners[1]->p+d1+d2;
-      test_points[2] = test_corners[2]->p-d1+d2;
+      test_points[0] = test_corners[0]->p+d1-d2+b_o;
+      test_points[1] = test_corners[1]->p+d1+d2+b_o;
+      test_points[2] = test_corners[2]->p-d1+d2+b_o;
       
       simplewarp_bilin(img, box, test_points, 9);
       
@@ -3686,7 +3433,7 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
 	    pattern_prescore(small_hc_sb, p, p+Point2f(5, -5)) >= prescore_corner_limit ||
 	    pattern_prescore(small_hc_sb, p, p+Point2f(-5, -5)) >= prescore_corner_limit)*/
 #pragma omp critical
-	    corners.push_back(p);
+	    corners.push_back(p-b_o);
 	}
 #else
     for(int y=2*marker_maxsize;y<checker.size().height-2*marker_maxsize;y++)
@@ -3702,7 +3449,7 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
 	    pattern_prescore(small_hc_sb, p, p+Point2f(5, -5)) >= prescore_corner_limit ||
 	    pattern_prescore(small_hc_sb, p, p+Point2f(-5, -5)) >= prescore_corner_limit)
 #pragma omp critical
-	    corners.push_back(p);
+	    corners.push_back(p-b_o);
 	}
 #endif
   
@@ -3725,7 +3472,7 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
 #pragma omp parallel for
   for (uint32_t ci=0;ci<corners.size();ci++) {
     if (ci%500 == 0)
-      cout << ci << "estimated of" << corners.size() << " found " << markers.size() << "markers " << "                  \r" << flush;
+      cout << ci << "estimated of" << corners.size() << " found " << markers.size() << "markers " <<endl;//<< "                  \r" << flush;
     int mask = 7;
     //FIXME
     for(uint32_t i=0;i<markers.size() && mask;i++) {
@@ -3751,7 +3498,10 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
     if (corners2[i].score > max(corner_ok, corner_good)) {
 	candidates.add(&corners2[i], corners2[i].p);
 #ifdef PAINT_CANDIDATE_CORNERS
-      corners2[i].paint(paint);
+      //corners2[i].paint(paint);
+      Marker_Corner pc = corners2[i];
+      pc.p += b_o;
+      pc.paint(paint);
 #endif
     }
     
@@ -3777,7 +3527,7 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
 #pragma omp parallel for schedule(dynamic)
   for (uint32_t i=0;i<candidates.size();i++) {
     if (i%500 == 0)
-      cout << i << "/" << candidates.size() << " found " << markers.size() << "markers, scale " << scale << "                  \r" << flush;
+      cout << i << "/" << candidates.size() << " found " << markers.size() << "markers, scale " << scale << endl;//"                  \r" << flush;
     detect_marker((Marker_Corner*)candidates[i], checker, candidates, markers, imgs[scale_idx], small_hc_sb, scale);
   }
   //cout << i << "/" << candidates.size() << " found " << markers.size() << "markers, scale " << scale << endl;
@@ -4241,6 +3991,7 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
   int found;
   int lowest_scale;
   bool free_scales = false;
+  vector<Mat> scales_border;
   
   allcorners.resize(512);
   allmarkers.resize(512);
@@ -4261,10 +4012,15 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
     scales = new vector<Mat>(log2(scale_min)+3);
   else
     scales->resize(log2(scale_min)+3);
+  
+  scales_border.resize(log2(scale_min)+3);
 
   norms.resize(log2(scale_min)+3);
   checkers.resize(log2(scale_min)+3);
   (*scales)[1] = img;
+  
+  copyMakeBorder((*scales)[1], scales_border[1], border, border, border, border, BORDER_REPLICATE);
+  //scales_border[1] = (*scales)[1];
   
   //TODO for existing scales input check if images are already contained!
   for(int idx=1;idx<log2(scale_min)+2;idx++)
@@ -4273,13 +4029,15 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
     GaussianBlur((*scales)[idx],blurred,Size(3, 3), 0);
     //blur((*scales)[idx],blurred,Size(3, 3));
     resize(blurred, (*scales)[idx+1], Size((*scales)[idx].size().width/2,(*scales)[idx].size().height/2), INTER_NEAREST);
+    copyMakeBorder((*scales)[idx+1], scales_border[idx+1], border, border, border, border, BORDER_REPLICATE);
+    //scales_border[idx+1] = (*scales)[idx+1];
   }
   microbench_measure_output("scale");
   
-  norms[lowest_scale_idx].create((*scales)[lowest_scale_idx].size(), CV_8UC1);
-  checkers[lowest_scale_idx].create((*scales)[lowest_scale_idx].size(), CV_8UC1);
+  norms[lowest_scale_idx].create(scales_border[lowest_scale_idx].size(), CV_8UC1);
+  checkers[lowest_scale_idx].create(scales_border[lowest_scale_idx].size(), CV_8UC1);
   //norm_avg_SIMD((*scales)[lowest_scale_idx], norms[lowest_scale_idx], marker_basesize);
-  localHistCont((*scales)[lowest_scale_idx], norms[lowest_scale_idx], marker_basesize);
+  localHistCont(scales_border[lowest_scale_idx], norms[lowest_scale_idx], marker_basesize);
   simpleChessCorner_SIMD(norms[lowest_scale_idx], checkers[lowest_scale_idx], chess_dist);
   
   
@@ -4292,12 +4050,14 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
 	float rs = 1.0;  
 	Mat rkern = (Mat_<float>(3, 3) << 0,-rs,0,-rs,4.0*rs+1.0,-rs,0,-rs,0);
 	filter2D((*scales)[0], (*scales)[0], (*scales)[0].depth(), rkern);
+        copyMakeBorder((*scales)[0], scales_border[0], border, border, border, border, BORDER_REPLICATE);
+        //scales_border[0] = (*scales)[0];
       }
       
-      norms[scale_idx].create((*scales)[scale_idx].size(), CV_8UC1);
-      checkers[scale_idx].create((*scales)[scale_idx].size(), CV_8UC1);
+      norms[scale_idx].create(scales_border[scale_idx].size(), CV_8UC1);
+      checkers[scale_idx].create(scales_border[scale_idx].size(), CV_8UC1);
       //norm_avg_SIMD((*scales)[scale_idx], norms[scale_idx], marker_basesize);
-      localHistCont((*scales)[scale_idx], norms[scale_idx], marker_basesize);
+      localHistCont(scales_border[scale_idx], norms[scale_idx], marker_basesize);
       simpleChessCorner_SIMD(norms[scale_idx], checkers[scale_idx], chess_dist);
       
 #ifdef USE_SLOW_CORNERs
@@ -4318,8 +4078,8 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
       
       microbench_measure_output("norm and checker");
       
-      Marker::detect_scale((*scales), norms, checkers, markers_raw, s, effort);
-      //cout << " count " << markers_raw.size() << " scale " << s << endl; 
+      Marker::detect_scale(scales_border, norms, checkers, markers_raw, s, effort);
+      cout << " count " << markers_raw.size() << " scale " << s << endl; 
       
 #ifdef PAINT_CANDIDATE_CORNERS
       cvtColor(img, paint, COLOR_GRAY2BGR);
@@ -4353,17 +4113,17 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
 	
 	if (effort < 0.25 && markers_raw.size() >= mincount)
 	  break;
-	found += checkneighbours3((*scales)[1], allmarkers, markers_raw, checked_3);
+	//found += checkneighbours3((*scales)[1], allmarkers, markers_raw, checked_3);
 	checked_3 = checked_new;
 	
 	if (effort < 0.25 && markers_raw.size() >= mincount)
 	  break;
-	found = checkneighbours2((*scales)[1], allmarkers, markers_raw, checked_2);
+	//found = checkneighbours2((*scales)[1], allmarkers, markers_raw, checked_2);
 	checked_2 = checked_new;
 	
 	if (effort < 0.25 && markers_raw.size() >= mincount)
 	  break;
-	found += checkneighbours((*scales)[1], allmarkers, markers_raw, checked_1);
+	//found += checkneighbours((*scales)[1], allmarkers, markers_raw, checked_1);
 	checked_1 = checked_new;
       }
       
@@ -4498,7 +4258,7 @@ void Marker::detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_s
             //mc.p = mc.p*2.0;
             //mc.estimateDir(scales[s]);
             //mc.refine_size(scales[1], 1.0, true , 0, mc.size, mc.size/2);
-            mc.refine_gradient(scales[1], 1.0);
+            //mc.refine_gradient(scales[1], 1.0);
 
             //printf("%02d %02d  ", (int)(mc.size+1), (int)((mc.size+2)*0.5));
             //mc.refine(scales[0], true);
