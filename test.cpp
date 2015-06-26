@@ -19,7 +19,6 @@ const int grid_height = 14;
 const bool use_rgb = false;
 
 const int subfit_oversampling = 2;
-const int subfit_refine_subpix = 100;
 
 void usage(const char *c)
 {
@@ -50,7 +49,7 @@ Point2f grid_to_world(Corner &c, int grid_w)
   return p;
 }
 
-bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<Point3f> > &all_world_points, vector<Corner> corners, int hpages, int vpages)
+bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<Point3f> > &all_world_points, vector<Corner> &corners, int hpages, int vpages, vector<Corner> &corners_filtered)
 {
   if (!corners.size()) return false;
   
@@ -59,12 +58,13 @@ bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<
   vector<Point3f> world_points;
   vector<Point2f> img_points_check[4];
   vector<Point2f> world_points_check;
+  vector<int> pos;
   vector <uchar> inliers;
   
   for(uint i=0;i<corners.size();i++) {
     int px, py;
     if (corners[i].page > hpages*vpages)
-      continue;
+      continue;    
     /*if (corners[i].page != 0)
       continue;*/
     px = corners[i].page % hpages;
@@ -72,6 +72,7 @@ bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<
     px*=32;
     py*=32;
     img_points_check[0].push_back(corners[i].p);
+    pos.push_back(i);
     for(int c=1;c<4;c++)
       if (all_img_points[c].size())
         img_points_check[c].push_back(corners[i].pc[c-1]);
@@ -84,6 +85,7 @@ bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<
   for(uint i=0;i<inliers.size();i++) {
     if (!inliers[i])
       continue;
+    corners_filtered.push_back(corners[pos[i]]);
     img_points[0].push_back((img_points_check[0])[i]);
     for(int c=1;c<4;c++)
       if (all_img_points[c].size())
@@ -127,7 +129,7 @@ void calibrate_channel(vector<vector<Point2f> > &img_points, vector<vector<Point
   imwrite("off_hdm.png", paint);
 }
 
-void check_calibration(vector<Corner> &corners, int w, int h, Mat &img)
+void check_calibration(vector<Corner> &corners, int w, int h, Mat &img, vector<Corner> &corners_filtered)
 {
   vector<Mat> rvecs, tvecs;
   Mat cameraMatrix(3,3,cv::DataType<double>::type);
@@ -146,7 +148,7 @@ void check_calibration(vector<Corner> &corners, int w, int h, Mat &img)
     
   printf("corners: %d\n", corners.size());
     
-  if (!calib_savepoints(img_points, world_points, corners, grid_width, grid_height)) {
+  if (!calib_savepoints(img_points, world_points, corners, grid_width, grid_height, corners_filtered)) {
     return;
   }
   
@@ -298,8 +300,8 @@ bool corner_find_off_save(vector<Corner> &corners, Corner ref, int x, int y, Poi
 
 
 struct Gauss2dError {
-  Gauss2dError(int val, int x, int y)
-      : val_(val), x_(x), y_(y) {}
+  Gauss2dError(int val, int x, int y, double w)
+      : val_(val), x_(x), y_(y), w_(w) {}
 
 /**
  * used function: 
@@ -314,21 +316,22 @@ struct Gauss2dError {
     x2 = x2*x2;
     y2 = y2*y2;
     //want to us sqrt(x2+y2)+T(1.0) but leads to invalid jakobian?
-    //T d = sqrt(x2+y2+T(1.0));
+    T d = sqrt(x2+y2+T(0.0001)) + T(w_);
     //non-weighted leads to better overall estimates?
-    residuals[0] = (T(val_) - p[5] - p[2]*exp(-(x2/sx2+y2/sy2)));
+    residuals[0] = (T(val_) - p[5] - p[2]*exp(-(x2/sx2+y2/sy2)))/d;
     
     return true;
   }
 
   // Factory to hide the construction of the CostFunction object from
   // the client code.
-  static ceres::CostFunction* Create(int val, int x, int y) {
+  static ceres::CostFunction* Create(int val, int x, int y, double w) {
     return (new ceres::AutoDiffCostFunction<Gauss2dError, 1, 6>(
-                new Gauss2dError(val, x, y)));
+                new Gauss2dError(val, x, y, w)));
   }
 
   int x_, y_, val_;
+  double w_;
 };
 
 /**
@@ -377,7 +380,7 @@ double fit_gauss(Mat &img, double *params)
   ceres::Problem problem_gauss;
   for(y=b;y<size-b;y++)
     for(x=b;x<size-b;x++) {
-      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y);
+      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, size/5);
       problem_gauss.AddResidualBlock(cost_function, NULL, params);
     }
   
@@ -456,7 +459,7 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
     maxlen = sqrt(maxlen);
     //printf("longest side %f\n", maxlen);
     
-    if (maxlen < 5*5)
+    if (maxlen < 5*6)
       continue;
     
     size = maxlen*subfit_oversampling/5;
@@ -536,7 +539,7 @@ int main(int argc, char* argv[])
   
   //FIXME hack - remove detection problems
   Mat pre;
-  GaussianBlur(img, pre, Size(5,5), 0);
+  GaussianBlur(img, pre, Size(25,25), 0);
   
   microbench_measure_output("app startup");
   //CALLGRIND_START_INSTRUMENTATION;
@@ -561,7 +564,8 @@ int main(int argc, char* argv[])
     putText(paint, buf, c.p, FONT_HERSHEY_PLAIN, 0.5, Scalar(255,255,255,0), 1, CV_AA);
   }
   
-  check_calibration(corners, img.size().width, img.size().height, img);
+  vector<Corner> corners_f;
+  check_calibration(corners, img.size().width, img.size().height, img, corners_f);
   //check_precision(corners, img.size().width, img.size().height, img, argv[3]);
   
   Mat gray;
@@ -571,9 +575,10 @@ int main(int argc, char* argv[])
     gray = img;
   
   vector<Corner> corners_sub; 
-  detect_sub_corners(gray , corners, corners_sub, paint);
+  detect_sub_corners(gray , corners_f, corners_sub, paint);
   
-  check_calibration(corners_sub, img.size().width, img.size().height, img);
+  vector<Corner> corners_f3;
+  check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f3);
   
   imwrite(argv[2], paint);
   
