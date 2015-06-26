@@ -311,7 +311,9 @@ struct Gauss2dError {
     T sy2 = T(2.0)*p[4]*p[4];
     x2 = x2*x2;
     y2 = y2*y2;
-    residuals[0] = T(val_) - p[5] - p[2]*exp(-(x2/sx2+y2/sy2));
+    //want to us sqrt(x2+y2)+T(1.0) but leads to invalid jakobian?
+    T d = sqrt(x2+y2+T(1.0));
+    residuals[0] = (T(val_) - p[5] - p[2]*exp(-(x2/sx2+y2/sy2)))/d;
     
     return true;
   }
@@ -462,15 +464,15 @@ void detect_sub_corners(Mat &img, vector<Corner> corners)
         Mat oned;
         resize(proj, oned, Size(size, 1), INTER_AREA);
         
-        char buf[64];
-        sprintf(buf, "point%07d_%0d_%d.png", i, x, y);
-        imwrite(buf, proj);
+        //char buf[64];
+        //sprintf(buf, "point%07d_%0d_%d.png", i, x, y);
+        //imwrite(buf, proj);
         double params[6];
         double rms = fit_gauss(proj, params);
-        draw_gauss(proj, params);
-        sprintf(buf, "point%07d_%0d_%d_fit.png", i, x, y);
-        imwrite(buf, proj);
-        printf("refined position for %d %d %d: %fx%f, rms %f a %f\n", i, x, y, params[0], params[1], rms, params[2]);
+        //draw_gauss(proj, params);
+        //sprintf(buf, "point%07d_%0d_%d_fit.png", i, x, y);
+        //imwrite(buf, proj);
+        //printf("refined position for %d %d %d: %fx%f, rms %f a %f\n", i, x, y, params[0], params[1], rms, params[2]);
       }
 
   }
