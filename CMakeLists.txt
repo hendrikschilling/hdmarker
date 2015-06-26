@@ -22,6 +22,10 @@ if (APPLE)
     endif()
 endif()
 
+
+find_package(Ceres REQUIRED)
+include_directories(${CERES_INCLUDE_DIRS})
+
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
@@ -35,7 +39,7 @@ add_executable(hdmarker_generate marker_gen.cpp)
 add_executable(hdmarker_test test.cpp)
 #add_executable(hdmarker_scaletest testscales.cpp)
 target_link_libraries(hdmarker_generate ${OpenCV_LIBS} hdmarker)
-target_link_libraries(hdmarker_test ${OpenCV_LIBS} hdmarker)
+target_link_libraries(hdmarker_test ${OpenCV_LIBS} ${CERES_LIBRARIES} hdmarker)
 #target_link_libraries(hdmarker_scaletest ${OpenCV_LIBS} hdmarker)
 
 configure_file(hdmarker.pc.in hdmarker.pc @ONLY)

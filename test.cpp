@@ -6,6 +6,8 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 
+#include "ceres/ceres.h"
+
 #include <iostream>
 
 using namespace std;
@@ -14,7 +16,10 @@ using namespace cv;
 const int grid_width = 16;
 const int grid_height = 14;
 
-const bool use_rgb = true;
+const bool use_rgb = false;
+
+const int subfit_oversampling = 2;
+const int subfit_refine_subpix = 100;
 
 void usage(const char *c)
 {
@@ -209,6 +214,268 @@ void check_precision(vector<Corner> &corners, int w, int h, Mat &img, const char
   imwrite("off_ocv.png", paint);
 }*/
 
+bool corner_cmp(Corner a, Corner b)
+{
+  if (a.id.y != b.id.y)
+    return a.id.y < b.id.y;
+  else
+    return a.id.x < b.id.x;
+}
+
+bool corner_find_off_save(vector<Corner> &corners, Corner ref, int x, int y, Point2f &out)
+{
+  std::vector<Corner>::iterator found;
+  ref.id.x += x;
+  ref.id.y += y;
+  //FIXME doesn't work ?!
+  /*bounds=equal_range(corners.begin(), corners.end(), ref, corner_cmp);
+  if (bounds.first != bounds.second)
+    return true;*/
+  /*bool found = false;
+  for(int i=0;i<corners.size();i++)
+    if (corners[i].id == ref.id) {
+      found = true;
+      out = corners[i].p;
+      break;
+    }*/
+  found = lower_bound(corners.begin(), corners.end(), ref, corner_cmp);
+  if (found->id != ref.id)
+    return true;
+  out = found->p;
+  return false;
+}
+
+//FIXME width must be allowed non-integer values!
+//FIXME this does not actually do any subpixel processing!
+//netter code aber quatsch :-(
+/*double fit_1d_rect(Mat &oned, int width)
+{
+  int size = oned.total();
+  uint8_t *ptr = oned.ptr<uchar>(0);
+  
+  int64_t sum_bg = 0, sum_fg = 0;
+  
+  for(int i=width;i<2*width;i++)
+    sum_fg += ptr[i];
+  
+  for(int i=0;i<width;i++)
+    sum_bg += ptr[i];
+  for(int i=2*width;i<size;i++)
+    sum_bg += ptr[i];
+  
+  sum_fg *= subfit_refine_subpix;
+  sum_bg *= subfit_refine_subpix;
+  
+  //FIXME init????
+  uint64_t best = abs(sum_fg*(size-width)-sum_bg*width);
+  uint64_t cand;
+  uint64_t bestpos = 0;
+  
+  //FIXME first step wrong?
+  //i is position of box
+  for(int i=width;i<size-2*width;i++) {
+    uint8_t left = ptr[i];
+    uint8_t right = ptr[i+width];
+    for(int s=0;s<subfit_refine_subpix;s++) {
+      sum_fg -= left;
+      sum_bg += left;
+      sum_bg -= right;
+      sum_fg += right;
+      cand = abs(sum_fg*(size-width)-sum_bg*width);
+      if (cand > best) {
+        best = cand;
+        bestpos = i*subfit_refine_subpix+s;
+        printf("new %f %f\n", sum_fg*(1.0/width/subfit_refine_subpix), sum_bg*(1.0/(size-width)/subfit_refine_subpix));
+      }
+    }
+  }
+  
+  return bestpos*(1.0/subfit_refine_subpix);
+}*/
+
+
+
+struct Gauss2dError {
+  Gauss2dError(int val, int x, int y)
+      : val_(val), x_(x), y_(y) {}
+
+/**
+ * used function: 
+ */
+  template <typename T>
+  bool operator()(const T* const p,
+                  T* residuals) const {
+    T x2 = T(x_) - p[0];
+    T y2 = T(y_) - p[1];
+    T sx2 = T(2.0)*p[3]*p[3];
+    T sy2 = T(2.0)*p[4]*p[4];
+    x2 = x2*x2;
+    y2 = y2*y2;
+    residuals[0] = T(val_) - p[5] - p[2]*exp(-(x2/sx2+y2/sy2));
+    
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(int val, int x, int y) {
+    return (new ceres::AutoDiffCostFunction<Gauss2dError, 1, 6>(
+                new Gauss2dError(val, x, y)));
+  }
+
+  int x_, y_, val_;
+};
+
+/**
+ * Fit 2d gaussian to image, 5 parameter: \f$x_0\f$, \f$y_0\f$, amplitude, spread, background
+ * disregards a border of \f$\lfloor \mathit{size}/5 \rfloor\f$ pixels
+ */
+double fit_gauss(Mat &img, double *params)
+{
+  int size = img.size().width;
+  assert(img.size().height == size);
+  int b = size/5;
+  uint8_t *ptr = img.ptr<uchar>(0);
+  
+  assert(img.depth() == CV_8U);
+  assert(img.channels() == 1);
+  
+  //x,y
+  params[0] = size*0.5;
+  params[1] = size*0.5;
+  
+  int sum = 0;
+  int x, y = b;
+  for(x=b;x<size-b-1;x++)
+    sum += ptr[y*size+x];
+  y = size-b-1;
+  for(x=b+1;x<size-b;x++)
+    sum += ptr[y*size+x];
+  x = b;
+  for(y=b+1;y<size-b;y++)
+    sum += ptr[y*size+x];
+  x = size-b-1;
+  for(y=b;y<size-b-1;y++)
+    sum += ptr[y*size+x];
+  
+  //background
+  params[5] = sum / (4*(size-2*b-1));
+  
+  //amplitude
+  params[2] = ptr[size/2*(size+1)]-params[5];
+  
+  //spread
+  params[3] = size/5;
+  params[4] = size/5;
+
+  
+  ceres::Problem problem_gauss;
+  for(y=b;y<size-b;y++)
+    for(x=b;x<size-b;x++) {
+      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y);
+      problem_gauss.AddResidualBlock(cost_function, NULL, params);
+    }
+  
+  ceres::Solver::Options options;
+  options.max_num_iterations = 1000;
+  //options.linear_solver_type = ceres::DENSE_SCHUR;
+  //options.minimizer_progress_to_stdout = true;
+
+  /*options.num_threads = 2;
+  options.parameter_tolerance = 1e-20;
+  options.gradient_tolerance = 1e-20;
+  options.function_tolerance = 1e-20;*/
+  
+  ceres::Solver::Summary summary;
+  ceres::Solve(options, &problem_gauss, &summary);
+  
+  //std::cout << summary.FullReport() << "\n";
+  
+  return sqrt(summary.final_cost/problem_gauss.NumResiduals());
+}
+
+void draw_gauss(Mat &img, double *p)
+{
+  int size = img.size().width;
+  
+  img = Mat(size, size, CV_8U);
+  
+  for(int y=0;y<size;y++)
+    for(int x=0;x<size;x++) {
+      double x2 = x-p[0];
+      double y2 = y-p[1];
+      x2 = x2*x2;
+      y2 = y2*y2;
+      double sx2 = 2.0*p[3]*p[3];
+      double sy2 = 2.0*p[4]*p[4];
+      //printf("%dx%d %f\n", );
+      img.at<uchar>(y, x) = p[5] + p[2]*exp(-(x2/sx2+y2/sy2));
+    }
+}
+
+void detect_sub_corners(Mat &img, vector<Corner> corners)
+{
+  sort(corners.begin(), corners.end(), corner_cmp);
+  
+  vector<Point2f> ipoints(4);
+  vector<Point2f> cpoints(4);
+  
+  for(int i=0;i<corners.size();i++) {
+    Mat proj;
+    Corner c = corners[i];
+    int size;
+    
+    ipoints[0] = corners[i].p;
+    if (corner_find_off_save(corners, c, 1, 0, ipoints[1])) continue;
+    if (corner_find_off_save(corners, c, 1, 1, ipoints[2])) continue;
+    if (corner_find_off_save(corners, c, 0, 1, ipoints[3])) continue;
+    
+    float maxlen = 0;
+    for(int i=0;i<4;i++) {
+      Point2f v = ipoints[i]-ipoints[(i+1)%4];
+      float len = v.x*v.x+v.y*v.y;
+      if (len > maxlen)
+        maxlen = len;
+      v = ipoints[(i+3)%4]-ipoints[i];
+      len = v.x*v.x+v.y*v.y;
+      if (len > maxlen)
+        maxlen = len;
+    }
+    maxlen = sqrt(maxlen);
+    printf("longest side %f\n", maxlen);
+    
+    if (maxlen < 5*4)
+      continue;
+    
+    size = maxlen*subfit_oversampling/5;
+    
+    proj = Mat(size, size, CV_8U);
+    for(int y=0;y<5;y++)
+      for(int x=0;x<5;x++) {
+        cpoints[0] = Point2f(-x*size,-y*size);
+        cpoints[1] = Point2f((5-x)*size,-y*size);
+        cpoints[2] = Point2f((5-x)*size,(5-y)*size);
+        cpoints[3] = Point2f(-x*size,(5-y)*size);
+        
+        Mat pers = getPerspectiveTransform(ipoints, cpoints);
+        warpPerspective(img, proj, pers, Size(size, size), INTER_LINEAR);
+        Mat oned;
+        resize(proj, oned, Size(size, 1), INTER_AREA);
+        
+        char buf[64];
+        sprintf(buf, "point%07d_%0d_%d.png", i, x, y);
+        imwrite(buf, proj);
+        double params[6];
+        double rms = fit_gauss(proj, params);
+        draw_gauss(proj, params);
+        sprintf(buf, "point%07d_%0d_%d_fit.png", i, x, y);
+        imwrite(buf, proj);
+        printf("refined position for %d %d %d: %fx%f, rms %f a %f\n", i, x, y, params[0], params[1], rms, params[2]);
+      }
+
+  }
+}
+
 void corrupt(Mat &img)
 {
   GaussianBlur(img, img, Size(9,9), 0);
@@ -265,6 +532,13 @@ int main(int argc, char* argv[])
   
   check_calibration(corners, img.size().width, img.size().height, img);
   //check_precision(corners, img.size().width, img.size().height, img, argv[3]);
+  
+  Mat gray;
+  if (img.channels() != 1)
+    cvtColor(img, gray, CV_BGR2GRAY);
+  else
+    gray = img;
+  detect_sub_corners(gray , corners);
   
   imwrite(argv[2], paint);
   
