@@ -79,7 +79,7 @@ bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<
   }
   
   inliers.resize(world_points_check.size());
-  findHomography(world_points_check, img_points_check[0], CV_RANSAC, 10, inliers);
+  findHomography(world_points_check, img_points_check[0], CV_RANSAC, 200, inliers);
   
   for(uint i=0;i<inliers.size();i++) {
     if (!inliers[i])
@@ -396,7 +396,7 @@ double fit_gauss(Mat &img, double *params)
   
   //std::cout << summary.FullReport() << "\n";
   
-  if (summary.termination_type == ceres::CONVERGENCE)
+  if (summary.termination_type == ceres::CONVERGENCE && params[0] > b && params[0] < size-b-1 && params[1] > b && params[1] < size-b-1) 
     return sqrt(summary.final_cost/problem_gauss.NumResiduals());
   else {
     //std::cout << summary.FullReport() << "\n";
