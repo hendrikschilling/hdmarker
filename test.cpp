@@ -20,6 +20,34 @@ const bool use_rgb = false;
 
 const int subfit_oversampling = 2;
 
+#include <stdarg.h>
+
+void printprogress(int curr, int max, int &last, const char *fmt = NULL, ...)
+{
+  last = (last + 1) % 4;
+  int pos = curr*60/max;
+  char unf[] = "                                                             ]";
+  char fin[] = "[============================================================]";
+  char buf[100];
+  
+  char cs[] = "-\\|/";
+  memcpy(buf, fin, pos+1);
+  buf[pos+1] = cs[last];
+  memcpy(buf+pos+2, unf+pos+2, 62-pos-2+1);
+  if (!fmt) {
+    printf("%s\r", buf);
+  }
+  else {
+    printf("%s", buf);
+    va_list arglist;
+    va_start(arglist, fmt);
+    vprintf(fmt, arglist);
+    va_end(arglist);
+    printf("\r");
+  }
+  fflush(NULL);
+}
+
 void usage(const char *c)
 {
   printf("usage: %s <input image> <output image>", c);
@@ -342,7 +370,7 @@ double fit_gauss(Mat &img, double *params)
 {
   int size = img.size().width;
   assert(img.size().height == size);
-  int b = size/5;
+  int b = (size+4)/5;
   uint8_t *ptr = img.ptr<uchar>(0);
   
   assert(img.depth() == CV_8U);
@@ -380,7 +408,7 @@ double fit_gauss(Mat &img, double *params)
   ceres::Problem problem_gauss;
   for(y=b;y<size-b;y++)
     for(x=b;x<size-b;x++) {
-      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, size/5);
+      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, size*0.2);
       problem_gauss.AddResidualBlock(cost_function, NULL, params);
     }
   
@@ -429,13 +457,14 @@ void draw_gauss(Mat &img, double *p)
 
 void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, Mat &paint)
 {
+  int counter = 0;
   sort(corners.begin(), corners.end(), corner_cmp);
   
   vector<Point2f> ipoints(4);
   vector<Point2f> cpoints(4);
   
   for(int i=0;i<corners.size();i++) {
-    printf("."); fflush(NULL);
+    printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
     Mat proj;
     Corner c = corners[i];
     int size;
@@ -459,7 +488,7 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
     maxlen = sqrt(maxlen);
     //printf("longest side %f\n", maxlen);
     
-    if (maxlen < 5*6)
+    if (maxlen < 5*4)
       continue;
     
     size = maxlen*subfit_oversampling/5;
@@ -497,6 +526,99 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
         circle(paint, Point2i(res[0].x*16.0, res[0].y*16.0), 1, Scalar(0,255,0,0), 2, CV_AA, 4);
         
         Corner c_o(res[0], Point2i(c.id.x*10+2*x+1, c.id.y*10+2*y+1), 0);
+        //printf("found corner %f!\n", rms);
+#pragma omp critical
+        corners_out.push_back(c_o);
+      }
+
+  }
+  printf("\n");
+}
+
+
+void detect_sub_corners2(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, Mat &paint)
+{
+  int counter = 0;
+  
+  sort(corners.begin(), corners.end(), corner_cmp);
+  
+  vector<Point2f> ipoints(4);
+  vector<Point2f> cpoints(4);
+  
+  for(int i=0;i<corners.size();i++) {
+    printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
+    //printf("."); fflush(NULL);
+    Mat proj;
+    Corner c = corners[i];
+    int size;
+    
+    ipoints[0] = corners[i].p;
+    if (corner_find_off_save(corners, c, 2, 0, ipoints[1])) continue;
+    if (corner_find_off_save(corners, c, 2, 2, ipoints[2])) continue;
+    if (corner_find_off_save(corners, c, 0, 2, ipoints[3])) continue;
+    
+    float maxlen = 0;
+    for(int i=0;i<4;i++) {
+      Point2f v = ipoints[i]-ipoints[(i+1)%4];
+      float len = v.x*v.x+v.y*v.y;
+      if (len > maxlen)
+        maxlen = len;
+      v = ipoints[(i+3)%4]-ipoints[i];
+      len = v.x*v.x+v.y*v.y;
+      if (len > maxlen)
+        maxlen = len;
+    }
+    maxlen = sqrt(maxlen);
+    
+    if (maxlen < 5*4)
+      continue;
+    
+    size = maxlen*subfit_oversampling/5;
+    
+#pragma omp parallel for
+    for(int y=0;y<5;y++)
+      for(int x=0;x<5;x++) {
+        cpoints[0] = Point2f((0.5-x)*size,(0.5-y)*size);
+        cpoints[1] = Point2f((5.5-x )*size,(0.5-y)*size);
+        cpoints[2] = Point2f((5.5-x )*size,(5.5-y )*size);
+        cpoints[3] = Point2f((0.5-x)*size,(5.5-y )*size);
+        
+        proj = Mat(size, size, CV_8U);
+        Mat pers = getPerspectiveTransform(ipoints, cpoints);
+        Mat pers_i = getPerspectiveTransform(cpoints, ipoints);
+        warpPerspective(img, proj, pers, Size(size, size), INTER_LINEAR);
+        Mat oned;
+        resize(proj, oned, Size(size, 1), INTER_AREA);
+        
+        //char buf[64];
+        //sprintf(buf, "point%07d_%0d_%d.png", i, x, y);
+        //imwrite(buf, proj);
+        double params[6];
+        double rms = fit_gauss(proj, params);
+        if (rms >= 5.0)
+          continue;
+        //draw_gauss(proj, params);
+        //sprintf(buf, "point%07d_%0d_%d_fit.png", i, x, y);
+        //imwrite(buf, proj);
+        //printf("refined position for %d %d %d: %fx%f, rms %f a %f\n", i, x, y, params[0], params[1], rms, params[2]);
+        vector<Point2f> coords(1);
+        coords[0] = Point2f(params[0], params[1]);
+        vector<Point2f> res(1);
+        perspectiveTransform(coords, res, pers_i);
+        circle(paint, Point2i(res[0].x*16.0, res[0].y*16.0), 1, Scalar(0,255,0,0), 2, CV_AA, 4);
+        
+        
+        Corner c_o(res[0], Point2i(c.id.x*5+2*x, c.id.y*5+2*y), 0);
+        
+        
+        /*if (!x && y < 2) {
+          char buf[64];
+          sprintf(buf, "%d/%d", c_o.id.x, c_o.id.y);
+          circle(paint, c_o.p, 1, Scalar(0,0,0,0), 2);
+          circle(paint, c_o.p, 1, Scalar(0,255,0,0));
+          putText(paint, buf, c_o.p, FONT_HERSHEY_PLAIN, 0.5, Scalar(0,0,0,0), 2, CV_AA);
+          putText(paint, buf, c_o.p, FONT_HERSHEY_PLAIN, 0.5, Scalar(255,255,255,0), 1, CV_AA);
+        }*/
         //printf("found corner %f!\n", rms);
 #pragma omp critical
         corners_out.push_back(c_o);
@@ -574,11 +696,17 @@ int main(int argc, char* argv[])
   else
     gray = img;
   
-  //vector<Corner> corners_sub; 
-  //detect_sub_corners(gray , corners_f, corners_sub, paint);
+  vector<Corner> corners_sub; 
+  detect_sub_corners(gray , corners_f, corners_sub, paint);
   
   vector<Corner> corners_f2;
-  //check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f2);
+  check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f2);
+  
+  vector<Corner> corners_sub2; 
+  detect_sub_corners2(gray , corners_f2, corners_sub2, paint);
+  
+  vector<Corner> corners_f3;
+  check_calibration(corners_sub2, img.size().width, img.size().height, img, corners_f3);
   
   imwrite(argv[2], paint);
   
