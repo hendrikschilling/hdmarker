@@ -3581,14 +3581,15 @@ int checkneighbours(vector<Mat> &img, vector<vector<int>*> &allmarkers, vector<M
 	  c[2].p += n*(m->corners[1].p - m->corners[2].p);
 	  //FIXME use original scale and images?
 	  for(int i=0;i<3;i++) {
-	    if (c[i].p.x <= css || c[i].p.x >= w-2*css)
+	    c[i].scale = m->scale;
+            c[i] *= 1.0/m->scale;
+	    if (c[i].p.x <= css || c[i].p.x >= w-css)
 	      goto pos_invalid_h;
-	    if (c[i].p.y <= css || c[i].p.y >= h-2*css)
+	    if (c[i].p.y <= css || c[i].p.y >= h-css)
 	      goto pos_invalid_h;
-	    c[i].scale = 1;
 	    c[i].refine(img[scale], true, 0);
-	    //if (c[i].score < corner_ok)
-	      //goto pos_invalid_h;
+	    if (c[i].score < corner_good)
+	      goto pos_invalid_h;
 	  }
 	  newm = Marker(Mat(Size(9, 9), CV_8UC1), img[scale], 0.0, &c[0], &c[1], &c[2], m->scale, m->page, m->id+n);
 #ifdef DEBUG_SAVESTEPS
@@ -3616,14 +3617,15 @@ int checkneighbours(vector<Mat> &img, vector<vector<int>*> &allmarkers, vector<M
 	  c[2].p += n/16*(m->corners[3].p - m->corners[2].p);
 	  //FIXME use original scale and images?
 	  for(int i=0;i<3;i++) {
-	    if (c[i].p.x <= css || c[i].p.x >= w-2*css)
+	    c[i].scale = m->scale;
+            c[i] *= 1.0/m->scale;
+	    if (c[i].p.x <= css || c[i].p.x >= w-css)
 	      goto pos_invalid_v;
-	    if (c[i].p.y <= css || c[i].p.y >= h-2*css)
+	    if (c[i].p.y <= css || c[i].p.y >= h-css)
 	      goto pos_invalid_v;
-	    c[i].scale = 1;
 	    c[i].refine(img[scale], true, 0);
-	    //if (c[i].score < corner_ok)
-	      //goto pos_invalid_v;
+	    if (c[i].score < corner_good)
+	      goto pos_invalid_v;
 	  }
 	  newm = Marker(Mat(Size(9, 9), CV_8UC1), img[scale], 0.0, &c[0], &c[1], &c[2], m->scale, m->page, m->id+n);
 #ifdef DEBUG_SAVESTEPS
@@ -3666,13 +3668,13 @@ int try_marker_from_corners(Mat &img, Marker_Corner c[3], int page, int id, vect
   Marker m;
   
   for(int i=0;i<3;i++) {
-    if (c[i].p.x <= css || c[i].p.x >= w-2*css)
+    if (c[i].p.x <= css || c[i].p.x >= w-css)
       return 0;
-    if (c[i].p.y <= css || c[i].p.y >= h-2*css)
+    if (c[i].p.y <= css || c[i].p.y >= h-css)
       return 0;
     c[i].scale = scale;
     c[i].refine(img, true, 0);
-    if (c[i].score < corner_ok)
+    if (c[i].score < corner_good)
       return 0;
   }
   m = Marker(Mat(Size(9, 9), CV_8UC1), img, 0.0, &c[0], &c[1], &c[2], scale, page, id);
@@ -3792,8 +3794,8 @@ int checkneighbours2(vector<Mat> &img, vector<vector<int>*> &allmarkers, vector<
   int css = 2*corner_score_oversampling*corner_score_size;
   
 #ifdef DEBUG_SAVESTEPS
-  Mat paint_extrasearch;
-  cvtColor(img, paint_extrasearch, COLOR_GRAY2BGR);
+  //Mat paint_extrasearch;
+  //cvtColor(img, paint_extrasearch, COLOR_GRAY2BGR);
 #endif
   
   for(uint i=0;i<512;i++) {
@@ -3822,16 +3824,16 @@ int checkneighbours2(vector<Mat> &img, vector<vector<int>*> &allmarkers, vector<
 	  c[1].p += m->corners[1].p - m2->corners[1].p;
 	  c[2] = m->corners[2];
 	  c[2].p += m->corners[2].p - m2->corners[2].p;
-	  //FIXME use original scale and images?
 	  for(int i=0;i<3;i++) {
+	    c[i].scale = m->scale;
+            c[i] *= 1.0/m->scale;
 	    if (c[i].p.x <= css || c[i].p.x >= w-2*css)
 	      goto pos_invalid_h;
 	    if (c[i].p.y <= css || c[i].p.y >= h-2*css)
 	      goto pos_invalid_h;
-	    c[i].scale = 1;
 	    c[i].refine(img[scale], true, 0);
-	    //if (c[i].score < corner_ok)
-	      //goto pos_invalid_h;
+	    if (c[i].score < corner_good)
+	      goto pos_invalid_h;
 	  }
 	  newm = Marker(Mat(Size(9, 9), CV_8UC1), img[scale], 0.0, &c[0], &c[1], &c[2], m->scale, m->page, m->id+n);
 #ifdef DEBUG_SAVESTEPS
@@ -3864,14 +3866,15 @@ int checkneighbours2(vector<Mat> &img, vector<vector<int>*> &allmarkers, vector<
 	  c[2].p += m->corners[2].p - m2->corners[2].p;
 	  //FIXME use original scale and images?
 	  for(int i=0;i<3;i++) {
+	    c[i].scale = m->scale;
+            c[i] *= 1.0/m->scale;
 	    if (c[i].p.x <= css || c[i].p.x >= w-2*css)
 	      goto pos_invalid_v;
 	    if (c[i].p.y <= css || c[i].p.y >= h-2*css)
 	      goto pos_invalid_v;
-	    c[i].scale = scale;
 	    c[i].refine(img[scale], true, 0);
-	    //if (c[i].score < corner_ok)
-	      //goto pos_invalid_v;
+	    if (c[i].score < corner_good)
+	      goto pos_invalid_v;
 	  }
 	  newm = Marker(Mat(Size(9, 9), CV_8UC1), img[scale], 0.0, &c[0], &c[1], &c[2], m->scale, m->page, m->id+n);
 #ifdef DEBUG_SAVESTEPS
@@ -4120,7 +4123,7 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
 	
 	if (effort < 0.25 && markers_raw.size() >= mincount)
 	  break;
-	//found += checkneighbours3(scales_border, allmarkers, markers_raw, checked_3);
+	found += checkneighbours3(scales_border, allmarkers, markers_raw, checked_3);
 	checked_3 = checked_new;
 	
 	if (effort < 0.25 && markers_raw.size() >= mincount)
@@ -4130,7 +4133,7 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
 	
 	if (effort < 0.25 && markers_raw.size() >= mincount)
 	  break;
-	//found += checkneighbours(scales_border, allmarkers, markers_raw, checked_1);
+	found += checkneighbours(scales_border, allmarkers, markers_raw, checked_1);
 	checked_1 = checked_new;
       }
       
@@ -4265,7 +4268,7 @@ void Marker::detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_s
             //mc.p = mc.p*2.0;
             //mc.estimateDir(scales[s]);
             //mc.refine_size(scales[1], 1.0, true , 0, mc.size, mc.size/2);
-            //mc.refine_gradient(scales[1], 1.0);
+            mc.refine_gradient(scales[1], 1.0);
 
             //printf("%02d %02d  ", (int)(mc.size+1), (int)((mc.size+2)*0.5));
             //mc.refine(scales[0], true);
