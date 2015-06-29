@@ -18,6 +18,8 @@ const int grid_height = 14;
 
 const bool use_rgb = false;
 
+const bool demosaic = true;
+
 const int subfit_oversampling = 2;
 
 #include <stdarg.h>
@@ -653,14 +655,20 @@ int main(int argc, char* argv[])
   if (argc != 3 && argc != 4)
     usage(argv[0]);
   
-  img = cv::imread(argv[1]);
-  paint = cv::imread(argv[1]);
-  //corrupt(img);
-  imwrite("corrupted.png", img);
-  Marker::init();
+  if (demosaic) {
+    img = cv::imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
+    paint = cv::imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
+    cvtColor(img, img, COLOR_BayerRG2BGR);
+    cvtColor(paint, paint, COLOR_BayerRG2BGR);
+  }
+  else {
+    img = cv::imread(argv[1]);
+    paint = cv::imread(argv[1]);
+  }  
   
-  cvtColor(img, img, COLOR_BayerRG2BGR);
-  cvtColor(paint, paint, COLOR_BayerRG2BGR);
+  //corrupt(img);
+  //imwrite("corrupted.png", img);
+  Marker::init();
   
   microbench_measure_output("app startup");
   //CALLGRIND_START_INSTRUMENTATION;
