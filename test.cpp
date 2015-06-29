@@ -659,16 +659,15 @@ int main(int argc, char* argv[])
   imwrite("corrupted.png", img);
   Marker::init();
   
-  //FIXME hack - remove detection problems
-  Mat pre;
-  GaussianBlur(img, pre, Size(5,5), 0);
+  cvtColor(img, img, COLOR_BayerRG2BGR);
+  cvtColor(paint, paint, COLOR_BayerRG2BGR);
   
   microbench_measure_output("app startup");
   //CALLGRIND_START_INSTRUMENTATION;
   if (argc == 4)
-    Marker::detect(pre, corners,use_rgb,0,0,atof(argv[3]),100);
+    Marker::detect(img, corners,use_rgb,0,0,atof(argv[3]),100);
   else
-    Marker::detect(pre, corners,use_rgb,0,0,0.5);
+    Marker::detect(img, corners,use_rgb,0,0,0.5);
   //CALLGRIND_STOP_INSTRUMENTATION;
     
   microbench_init();
