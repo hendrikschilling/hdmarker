@@ -577,8 +577,8 @@ int main(int argc, char* argv[])
   //vector<Corner> corners_sub; 
   //detect_sub_corners(gray , corners_f, corners_sub, paint);
   
-  //vector<Corner> corners_f3;
-  //check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f3);
+  vector<Corner> corners_f2;
+  //check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f2);
   
   imwrite(argv[2], paint);
   

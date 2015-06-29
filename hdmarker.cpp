@@ -17,8 +17,8 @@
 #endif
 
 //#define WRITE_PROJECTED_IDS
-#define PAINT_CANDIDATE_CORNERS
-#define DEBUG_SAVESTEPS
+//#define PAINT_CANDIDATE_CORNERS
+//#define DEBUG_SAVESTEPS
 //#define USE_SLOW_CORNERs
 
 /*
@@ -155,8 +155,9 @@ vector<Point2f> refine_corners;
     
     Marker_Corner Marker_Corner::operator*(float s)
     {
-      p *= s;
-      return *this;
+      Marker_Corner nc = *this;
+      nc.p *= s;
+      return nc;
     }
     
     Marker_Corner Marker_Corner::operator*=(float s)
@@ -3544,18 +3545,16 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
 }*/
 
 //FIXME call again for newly recognized markers...
-int checkneighbours(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> &markers, int checked_idx)
+int checkneighbours(vector<Mat> &img, vector<vector<int>*> &allmarkers, vector<Marker> &markers, int checked_idx)
 {
   Marker *m;
   int found = 0;
   int pdc = post_detection_range;
   int css = 2*corner_score_oversampling*corner_score_size;
-  int w = img.size().width;
-  int h = img.size().height;
   
 #ifdef DEBUG_SAVESTEPS
-  Mat paint_extrasearch;
-  cvtColor(img, paint_extrasearch, COLOR_GRAY2BGR);
+  //Mat paint_extrasearch;
+  //cvtColor(img, paint_extrasearch, COLOR_GRAY2BGR);
 #endif
   
   for(uint i=0;i<512;i++) {
@@ -3564,6 +3563,10 @@ int checkneighbours(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> &
     for(uint j=0;j<512;j++)
       if ((*allmarkers[i])[j] != -1 && (*allmarkers[i])[j] >= checked_idx) {
 	m = &markers[(*allmarkers[i])[j]];
+        int scale = log2(m->scale)+1;
+        int w = img[scale].size().width;
+        int h = img[scale].size().height;
+        
 	//check neighbours
 	for(int n = -2*pdc;n<=2*pdc;n+=2)
 	if (j+n < 512 && j+n >= 0 && (*allmarkers[i])[j+n] == -1) {
@@ -3583,11 +3586,11 @@ int checkneighbours(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> &
 	    if (c[i].p.y <= css || c[i].p.y >= h-2*css)
 	      goto pos_invalid_h;
 	    c[i].scale = 1;
-	    c[i].refine(img, true, 0);
+	    c[i].refine(img[scale], true, 0);
 	    //if (c[i].score < corner_ok)
 	      //goto pos_invalid_h;
 	  }
-	  newm = Marker(Mat(Size(9, 9), CV_8UC1), img, 0.0, &c[0], &c[1], &c[2], 1.0, m->page, m->id+n);
+	  newm = Marker(Mat(Size(9, 9), CV_8UC1), img[scale], 0.0, &c[0], &c[1], &c[2], m->scale, m->page, m->id+n);
 #ifdef DEBUG_SAVESTEPS
 	  newm.paint(paint_extrasearch);
 #endif
@@ -3618,11 +3621,11 @@ int checkneighbours(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> &
 	    if (c[i].p.y <= css || c[i].p.y >= h-2*css)
 	      goto pos_invalid_v;
 	    c[i].scale = 1;
-	    c[i].refine(img, true, 0);
+	    c[i].refine(img[scale], true, 0);
 	    //if (c[i].score < corner_ok)
 	      //goto pos_invalid_v;
 	  }
-	  newm = Marker(Mat(Size(9, 9), CV_8UC1), img, 0.0, &c[0], &c[1], &c[2], 1.0, m->page, m->id+n);
+	  newm = Marker(Mat(Size(9, 9), CV_8UC1), img[scale], 0.0, &c[0], &c[1], &c[2], m->scale, m->page, m->id+n);
 #ifdef DEBUG_SAVESTEPS
 	  newm.paint(paint_extrasearch);
 #endif
@@ -3655,7 +3658,7 @@ void corners_offset(Marker_Corner c[3], int offx, int offy, Point2f dx, Point2f 
     c[i].p += offx*dx + offy*dy;
 }
 
-int try_marker_from_corners(Mat &img, Marker_Corner c[3], int page, int id, vector<vector<int>*> &allmarkers, vector<Marker> &markers)
+int try_marker_from_corners(Mat &img, Marker_Corner c[3], int page, int id, vector<vector<int>*> &allmarkers, vector<Marker> &markers, float scale)
 {
   int css = 2*corner_score_oversampling*corner_score_size;
   int w = img.size().width;
@@ -3667,12 +3670,12 @@ int try_marker_from_corners(Mat &img, Marker_Corner c[3], int page, int id, vect
       return 0;
     if (c[i].p.y <= css || c[i].p.y >= h-2*css)
       return 0;
-    c[i].scale = 1;
+    c[i].scale = scale;
     c[i].refine(img, true, 0);
     if (c[i].score < corner_ok)
       return 0;
   }
-  m = Marker(Mat(Size(9, 9), CV_8UC1), img, 0.0, &c[0], &c[1], &c[2], 1.0, page, id);
+  m = Marker(Mat(Size(9, 9), CV_8UC1), img, 0.0, &c[0], &c[1], &c[2], scale, page, id);
   if (m.id == id && m.page == page) {
     m.filter(NULL, markers, 1);
     markers.push_back(m);
@@ -3684,19 +3687,20 @@ int try_marker_from_corners(Mat &img, Marker_Corner c[3], int page, int id, vect
 
 void corners_from_marker_offset(Marker_Corner c[3], Marker *m, int x, int y)
 {
-  Point2f dx = m->corners[0].p - m->corners[3].p;
-  Point2f dy =  m->corners[1].p - m->corners[0].p;
+  float fac = (1.0/m->scale);
+  Point2f dx = (m->corners[0].p - m->corners[3].p)*fac;
+  Point2f dy =  (m->corners[1].p - m->corners[0].p)*fac;
   
-  c[0] = m->corners[0];
-  c[1] = m->corners[1];
-  c[2] = m->corners[2];
+  c[0] = m->corners[0]*fac;
+  c[1] = m->corners[1]*fac;
+  c[2] = m->corners[2]*fac;
   
   corners_offset(c, x, y, dx, dy);
 }
 
 //TODO correct projection & project all four corners
 //TODO use original scale and images?
-int checkneighbours3(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> &markers, int checked_idx)
+int checkneighbours3(vector<Mat> &img, vector<vector<int>*> &allmarkers, vector<Marker> &markers, int checked_idx)
 {
   Marker *m;
   int found = 0;
@@ -3704,8 +3708,8 @@ int checkneighbours3(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> 
   int pdc = post_detection_range/2*2+1;
   
 #ifdef DEBUG_SAVESTEPS
-  Mat paint_extrasearch;
-  cvtColor(img, paint_extrasearch, COLOR_GRAY2BGR);
+  //Mat paint_extrasearch;
+  //cvtColor(img, paint_extrasearch, COLOR_GRAY2BGR);
 #endif
   
   for(uint i=0;i<512;i++) {
@@ -3717,13 +3721,14 @@ int checkneighbours3(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> 
 	continue;
       
       m = &markers[(*allmarkers[i])[j]];
+      int scale = log2(m->scale)+1;
       //check neighbours
       for(int n = -pdc;n<=pdc;n+=2) {
 	if (j+n >= 512 || j+n < 0 || (*allmarkers[i])[j+n] != -1)
 	  continue;
 	Marker_Corner c[3];
 	corners_from_marker_offset(c, m, n, -1);
-	found += try_marker_from_corners(img, c, m->page, m->id+n, allmarkers, markers);
+	found += try_marker_from_corners(img[scale], c, m->page, m->id+n, allmarkers, markers, m->scale);
 	//m may be moved by push to markers array!
 	m = &markers[(*allmarkers[i])[j]];
       }
@@ -3732,7 +3737,7 @@ int checkneighbours3(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> 
 	  continue;
 	Marker_Corner c[3];
 	corners_from_marker_offset(c, m, n+32, 1);
-	found += try_marker_from_corners(img, c, m->page, m->id+n, allmarkers, markers);
+	found += try_marker_from_corners(img[scale], c, m->page, m->id+n, allmarkers, markers, m->scale);
 	//m may be moved by push to markers array!
 	m = &markers[(*allmarkers[i])[j]];
       }
@@ -3743,13 +3748,14 @@ int checkneighbours3(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> 
 	continue;
       
       m = &markers[(*allmarkers[i])[j]];
+      int scale = log2(m->scale)+1;
       //check neighbours
       for(int n = -pdc;n<=pdc;n+=2) {
 	if (j+n >= 512 || j+n < 0 || (*allmarkers[i])[j+n] != -1)
 	  continue;
 	Marker_Corner c[3];
 	corners_from_marker_offset(c, m, n, 1);
-	found += try_marker_from_corners(img, c, m->page, m->id+n, allmarkers, markers);
+	found += try_marker_from_corners(img[scale], c, m->page, m->id+n, allmarkers, markers, m->scale);
 	//m may be moved by push to markers array!
 	m = &markers[(*allmarkers[i])[j]];
       }
@@ -3758,7 +3764,7 @@ int checkneighbours3(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> 
 	  continue;
 	Marker_Corner c[3];
 	corners_from_marker_offset(c, m, n-32, -1);
-	found += try_marker_from_corners(img, c, m->page, m->id+n, allmarkers, markers);
+	found += try_marker_from_corners(img[scale], c, m->page, m->id+n, allmarkers, markers, m->scale);
 	//m may be moved by push to markers array!
 	m = &markers[(*allmarkers[i])[j]];
       }
@@ -3778,14 +3784,12 @@ int checkneighbours3(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> 
 }
 
 //FIXME call again for newly recognized markers...
-int checkneighbours2(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> &markers, int checked_idx)
+int checkneighbours2(vector<Mat> &img, vector<vector<int>*> &allmarkers, vector<Marker> &markers, int checked_idx)
 {
   Marker *m,*m2;
   int found = 0;
   int pdc = post_detection_range;
   int css = 2*corner_score_oversampling*corner_score_size;
-  int w = img.size().width;
-  int h = img.size().height;
   
 #ifdef DEBUG_SAVESTEPS
   Mat paint_extrasearch;
@@ -3798,6 +3802,9 @@ int checkneighbours2(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> 
     for(uint j=0;j<512;j++)
       if ((*allmarkers[i])[j] != -1) {
 	m = &markers[(*allmarkers[i])[j]];
+        int scale = log2(m->scale)+1;
+        int w = img[scale].size().width;
+        int h = img[scale].size().height;
 	//check neighbours
 	for(int n = -2*pdc;n<=2*pdc;n+=2)
 	if (j+n < 512 && j+n >= 0 && j-n < 512 && j-n >= 0 && (*allmarkers[i])[j+n] == -1) {
@@ -3822,11 +3829,11 @@ int checkneighbours2(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> 
 	    if (c[i].p.y <= css || c[i].p.y >= h-2*css)
 	      goto pos_invalid_h;
 	    c[i].scale = 1;
-	    c[i].refine(img, true, 0);
+	    c[i].refine(img[scale], true, 0);
 	    //if (c[i].score < corner_ok)
 	      //goto pos_invalid_h;
 	  }
-	  newm = Marker(Mat(Size(9, 9), CV_8UC1), img, 0.0, &c[0], &c[1], &c[2], 1.0, m->page, m->id+n);
+	  newm = Marker(Mat(Size(9, 9), CV_8UC1), img[scale], 0.0, &c[0], &c[1], &c[2], m->scale, m->page, m->id+n);
 #ifdef DEBUG_SAVESTEPS
 	  newm.paint(paint_extrasearch);
 #endif
@@ -3861,12 +3868,12 @@ int checkneighbours2(Mat &img, vector<vector<int>*> &allmarkers, vector<Marker> 
 	      goto pos_invalid_v;
 	    if (c[i].p.y <= css || c[i].p.y >= h-2*css)
 	      goto pos_invalid_v;
-	    c[i].scale = 1;
-	    c[i].refine(img, true, 0);
+	    c[i].scale = scale;
+	    c[i].refine(img[scale], true, 0);
 	    //if (c[i].score < corner_ok)
 	      //goto pos_invalid_v;
 	  }
-	  newm = Marker(Mat(Size(9, 9), CV_8UC1), img, 0.0, &c[0], &c[1], &c[2], 1.0, m->page, m->id+n);
+	  newm = Marker(Mat(Size(9, 9), CV_8UC1), img[scale], 0.0, &c[0], &c[1], &c[2], m->scale, m->page, m->id+n);
 #ifdef DEBUG_SAVESTEPS
 	  newm.paint(paint_extrasearch);
 #endif
@@ -4113,17 +4120,17 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
 	
 	if (effort < 0.25 && markers_raw.size() >= mincount)
 	  break;
-	//found += checkneighbours3((*scales)[1], allmarkers, markers_raw, checked_3);
+	//found += checkneighbours3(scales_border, allmarkers, markers_raw, checked_3);
 	checked_3 = checked_new;
 	
 	if (effort < 0.25 && markers_raw.size() >= mincount)
 	  break;
-	//found = checkneighbours2((*scales)[1], allmarkers, markers_raw, checked_2);
+	found = checkneighbours2(scales_border, allmarkers, markers_raw, checked_2);
 	checked_2 = checked_new;
 	
 	if (effort < 0.25 && markers_raw.size() >= mincount)
 	  break;
-	//found += checkneighbours((*scales)[1], allmarkers, markers_raw, checked_1);
+	//found += checkneighbours(scales_border, allmarkers, markers_raw, checked_1);
 	checked_1 = checked_new;
       }
       
