@@ -679,7 +679,6 @@ int main(int argc, char* argv[])
   //CALLGRIND_STOP_INSTRUMENTATION;
     
   microbench_init();
-  paint = cv::imread(argv[1]);
   
   printf("final score %d corners\n", corners.size());
   
