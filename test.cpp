@@ -431,7 +431,7 @@ struct GaussBorder2dError {
 
 
 struct GaussBorder2dError2 {
-  GaussBorder2dError(int val, int x, int y, double sw, double w, int size, double border[4])
+  GaussBorder2dError2(int val, int x, int y, double sw, double w, int size, double border[4])
       : val_(val), x_(x), y_(y), sw_(sw), w_(w), size_(size) {
         for(int i=0;i<4;i++)
           border_[i] = border[i];
@@ -485,8 +485,8 @@ struct GaussBorder2dError2 {
   // Factory to hide the construction of the CostFunction object from
   // the client code.
   static ceres::CostFunction* Create(int val, int x, int y, double sw, double w, int size, double border[4]) {
-    return (new ceres::AutoDiffCostFunction<GaussBorder2dError, 1, 8>(
-                new GaussBorder2dError(val, x, y, sw, w, size, border)));
+    return (new ceres::AutoDiffCostFunction<GaussBorder2dError2, 1, 8>(
+                new GaussBorder2dError2(val, x, y, sw, w, size, border)));
   }
 
   int x_, y_, val_, size_;
@@ -611,6 +611,50 @@ void draw_gauss_border(Mat &img, double *p, double *border)
       double lbx2 = x;
       lbx2 = lbx2*lbx2;
       double leb = exp(-lbx2/sx2);
+      leb = leb*(border[3]-p[5]);
+      
+      img.at<uchar>(y, x) = p[5] + lb+ub+rb+leb + p[2]*exp(-(x2/sx2+y2/sy2));
+    }
+}
+
+
+void draw_gauss_border2(Mat &img, double *p, double *border)
+{
+  int size = img.size().width;
+  
+  img = Mat(size, size, CV_8U);
+  
+  for(int y=0;y<size;y++)
+    for(int x=0;x<size;x++) {
+      double x2 = x-p[0];
+      double y2 = y-p[1];
+      x2 = x2*x2;
+      y2 = y2*y2;
+      double sx2 = 2.0*p[3]*p[3];
+      double sy2 = 2.0*p[4]*p[4];
+      double bsx2 = 2.0*p[6]*p[6];
+      double bsy2 = 2.0*p[7]*p[7];
+      //printf("%dx%d %f\n", );
+      
+      //possible lower border
+      double lby2 = y - size+1;
+      lby2 = lby2*lby2;
+      double lb = exp(-lby2/bsy2);
+      lb = lb*(border[0]-p[5]);
+      
+      double uby2 = y;
+      uby2 = uby2*uby2;
+      double ub = exp(-uby2/bsy2);
+      ub = ub*(border[2]-p[5]);
+      
+      double rbx2 = x - size+1;
+      rbx2 = rbx2*rbx2;
+      double rb = exp(-rbx2/bsx2);
+      rb = rb*(border[1]-p[5]);
+      
+      double lbx2 = x;
+      lbx2 = lbx2*lbx2;
+      double leb = exp(-lbx2/bsx2);
       leb = leb*(border[3]-p[5]);
       
       img.at<uchar>(y, x) = p[5] + lb+ub+rb+leb + p[2]*exp(-(x2/sx2+y2/sy2));
@@ -841,13 +885,39 @@ double fit_gauss(Mat &img, double *params)
         problem_gauss_border.AddResidualBlock(cost_function, NULL, params);
       }
     ceres::Solve(options, &problem_gauss_border, &summary2);
-    std::cout << summary2.FullReport() << "\n";
-    
-    printf("%f %f %f %f %f %f (%d) b:%f a:%f\n", params[0], params[1], params[6],params[7],params[8],params[9], debug_counter, params[5], params[2]);
-    summary = summary2;
+    //std::cout << summary2.FullReport() << "\n";
     
     draw_gauss_border(paint, params, border);
     sprintf(buf, "point%07d_fitg.png", debug_counter);
+    imwrite(buf, paint);
+    
+    //spread
+    params[3] = size*0.1;
+    params[4] = size*0.1;
+    params[6] = params[3];
+    params[7] = params[4];
+    
+    ceres::Problem problem_gauss_border2;
+    for(y=0;y<size-0;y++)
+      for(x=0;x<size-0;x++) {
+        double x2 = x-size*0.5;
+        double y2 = y-size*0.5;
+        x2 = x2*x2;
+        y2 = y2*y2;
+        double s2 = size;
+        s2=s2*s2;
+        double s = exp(-x2/s2-y2/s2);
+        ceres::CostFunction* cost_function = GaussBorder2dError2::Create(ptr[y*size+x], x, y, s, size*size*0.25, size-1, border);
+        problem_gauss_border2.AddResidualBlock(cost_function, NULL, params);
+      }
+    ceres::Solve(options, &problem_gauss_border2, &summary2);
+    std::cout << summary2.FullReport() << "\n";
+    
+    printf("%f %f %f (%d) b:%f a:%f\n", params[3], params[4], params[6],params[7],debug_counter, params[5], params[2]);
+    summary = summary2;
+    
+    draw_gauss_border2(paint, params, border);
+    sprintf(buf, "point%07d_fitg2.png", debug_counter);
     imwrite(buf, paint);
     debug_counter++;
   }
