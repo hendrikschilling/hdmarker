@@ -18,9 +18,9 @@ const int grid_height = 14;
 
 const bool use_rgb = false;
 
-const bool demosaic = true;
+const bool demosaic = false;
 
-const int subfit_oversampling = 2;
+const float subfit_oversampling = 1.5;
 
 #include <stdarg.h>
 
