@@ -477,7 +477,7 @@ struct GaussBorder2dError2 {
     //T d = sqrt(x2+y2+T(0.0001)) + T(w_);
     T d = exp(-(x2/T(w_)+y2/T(w_)))+T(sw_)+T(1.0);
     //non-weighted leads to better overall estimates?
-    residuals[0] = (T(val_) - (p[5] + lb +rb + leb + ub + p[2]*exp(-(x2/sx2+y2/sy2))))*d;
+    residuals[0] = (T(val_) - (p[5] + lb +rb + leb + ub + p[2]*exp(-(x2/sx2+y2/sy2))));
     
     return true;
   }
@@ -862,9 +862,9 @@ double fit_gauss(Mat &img, double *params)
     imwrite(buf, img);
     
     Mat paint = img.clone();
-    /*draw_border(paint, params, border);
+    draw_border(paint, params, border);
     sprintf(buf, "point%07d_fit.png", debug_counter);
-    imwrite(buf, paint);*/
+    imwrite(buf, paint);
     
     //spread
     params[3] = size*0.1;
@@ -911,9 +911,9 @@ double fit_gauss(Mat &img, double *params)
         problem_gauss_border2.AddResidualBlock(cost_function, NULL, params);
       }
     ceres::Solve(options, &problem_gauss_border2, &summary2);
-    std::cout << summary2.FullReport() << "\n";
+    //std::cout << summary2.FullReport() << "\n";
     
-    printf("%f %f %f (%d) b:%f a:%f\n", params[3], params[4], params[6],params[7],debug_counter, params[5], params[2]);
+    //printf("%f %f %f (%d) b:%f a:%f\n", params[3], params[4], params[6],params[7],debug_counter, params[5], params[2]);
     summary = summary2;
     
     draw_gauss_border2(paint, params, border);
