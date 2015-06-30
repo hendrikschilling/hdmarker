@@ -475,9 +475,9 @@ struct GaussBorder2dError2 {
     
     //want to us sqrt(x2+y2)+T(1.0) but leads to invalid jakobian?
     //T d = sqrt(x2+y2+T(0.0001)) + T(w_);
-    T d = exp(-(x2/T(w_)+y2/T(w_)))+T(sw_)+T(1.0);
+    T d = T(sw_)+T(1.0);
     //non-weighted leads to better overall estimates?
-    residuals[0] = (T(val_) - (p[5] + lb +rb + leb + ub + p[2]*exp(-(x2/sx2+y2/sy2))));
+    residuals[0] = (T(val_) - (p[5] + lb +rb + leb + ub + p[2]*exp(-(x2/sx2+y2/sy2))))*d;
     
     return true;
   }
@@ -904,7 +904,7 @@ double fit_gauss(Mat &img, double *params)
         double y2 = y-size*0.5;
         x2 = x2*x2;
         y2 = y2*y2;
-        double s2 = size;
+        double s2 = size*0.5;
         s2=s2*s2;
         double s = exp(-x2/s2-y2/s2);
         ceres::CostFunction* cost_function = GaussBorder2dError2::Create(ptr[y*size+x], x, y, s, size*size*0.25, size-1, border);
