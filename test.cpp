@@ -369,8 +369,11 @@ struct Gauss2dError {
 
 
 struct GaussBorder2dError {
-  GaussBorder2dError(int val, int x, int y, double sw, double w)
-      : val_(val), x_(x), y_(y), sw_(sw), w_(w) {}
+  GaussBorder2dError(int val, int x, int y, double sw, double w, int size, double border[4])
+      : val_(val), x_(x), y_(y), sw_(sw), w_(w), size_(size) {
+        for(int i=0;i<4;i++)
+          border_[i] = border[i];
+      }
 
 /**
  * used function: 
@@ -386,42 +389,173 @@ struct GaussBorder2dError {
     y2 = y2*y2;
     
     //possible lower border
-    T lby2 = T(y_) - p[6];
+    T lby2 = T(y_) - T(size_);
     lby2 = lby2*lby2;
-    T lb = exp(-lby2/(sy2));
+    T lb = exp(-lby2/sy2);
+    lb = lb * (T(border_[0])-p[5]);
     
-    T uby2 = T(y_) - p[8];
-    uby2 = uby2*uby2;
-    T ub = exp(-uby2/sy2);
-    
-    T rbx2 = T(x_) - p[7];
+    T rbx2 = T(x_) - T(size_);
     rbx2 = rbx2*rbx2;
     T rb = exp(-rbx2/sx2);
+    rb = rb * (T(border_[1])-p[5]);
     
-    T lbx2 = T(x_) - p[9];
+    T uby2 = T(y_);
+    uby2 = uby2*uby2;
+    T ub = exp(-uby2/sy2);
+    ub = ub * (T(border_[2])-p[5]);
+    
+    T lbx2 = T(x_);
     lbx2 = lbx2*lbx2;
     T leb = exp(-lbx2/sx2);
+    leb = leb * (T(border_[3])-p[5]);
     
     //want to us sqrt(x2+y2)+T(1.0) but leads to invalid jakobian?
     //T d = sqrt(x2+y2+T(0.0001)) + T(w_);
-    //T d = /*exp(-(x2/T(w_)+y2/T(w_)))+*/T(sw_)+0.5;
+    T d = exp(-(x2/T(w_)+y2/T(w_)))+T(sw_)+T(1.0);
     //non-weighted leads to better overall estimates?
-    residuals[0] = (T(val_) - (p[5] + p[2]*(lb +rb + leb + ub+exp(-(x2/sx2+y2/sy2)))))*T(sw_);
+    residuals[0] = (T(val_) - (p[5] + lb +rb + leb + ub + p[2]*exp(-(x2/sx2+y2/sy2))))*d;
     
     return true;
   }
 
   // Factory to hide the construction of the CostFunction object from
   // the client code.
-  static ceres::CostFunction* Create(int val, int x, int y, double sw, double w) {
-    return (new ceres::AutoDiffCostFunction<GaussBorder2dError, 1, 10>(
-                new GaussBorder2dError(val, x, y, sw, w)));
+  static ceres::CostFunction* Create(int val, int x, int y, double sw, double w, int size, double border[4]) {
+    return (new ceres::AutoDiffCostFunction<GaussBorder2dError, 1, 6>(
+                new GaussBorder2dError(val, x, y, sw, w, size, border)));
   }
 
-  int x_, y_, val_;
-  double w_, sw_;
+  int x_, y_, val_, size_;
+  double w_, sw_, border_[4];
 };
 
+
+struct GaussBorder2dError2 {
+  GaussBorder2dError(int val, int x, int y, double sw, double w, int size, double border[4])
+      : val_(val), x_(x), y_(y), sw_(sw), w_(w), size_(size) {
+        for(int i=0;i<4;i++)
+          border_[i] = border[i];
+      }
+
+/**
+ * used function: 
+ */
+  template <typename T>
+  bool operator()(const T* const p,
+                  T* residuals) const {
+    T x2 = T(x_) - p[0];
+    T y2 = T(y_) - p[1];
+    T sx2 = T(2.0)*p[3]*p[3];
+    T sy2 = T(2.0)*p[4]*p[4];
+    T bsx2 = T(2.0)*p[6]*p[6];
+    T bsy2 = T(2.0)*p[7]*p[7];
+    x2 = x2*x2;
+    y2 = y2*y2;
+    
+    //possible lower border
+    T lby2 = T(y_) - T(size_);
+    lby2 = lby2*lby2;
+    T lb = exp(-lby2/bsy2);
+    lb = lb * (T(border_[0])-p[5]);
+    
+    T rbx2 = T(x_) - T(size_);
+    rbx2 = rbx2*rbx2;
+    T rb = exp(-rbx2/bsx2);
+    rb = rb * (T(border_[1])-p[5]);
+    
+    T uby2 = T(y_);
+    uby2 = uby2*uby2;
+    T ub = exp(-uby2/bsy2);
+    ub = ub * (T(border_[2])-p[5]);
+    
+    T lbx2 = T(x_);
+    lbx2 = lbx2*lbx2;
+    T leb = exp(-lbx2/bsx2);
+    leb = leb * (T(border_[3])-p[5]);
+    
+    //want to us sqrt(x2+y2)+T(1.0) but leads to invalid jakobian?
+    //T d = sqrt(x2+y2+T(0.0001)) + T(w_);
+    T d = exp(-(x2/T(w_)+y2/T(w_)))+T(sw_)+T(1.0);
+    //non-weighted leads to better overall estimates?
+    residuals[0] = (T(val_) - (p[5] + lb +rb + leb + ub + p[2]*exp(-(x2/sx2+y2/sy2))))*d;
+    
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(int val, int x, int y, double sw, double w, int size, double border[4]) {
+    return (new ceres::AutoDiffCostFunction<GaussBorder2dError, 1, 8>(
+                new GaussBorder2dError(val, x, y, sw, w, size, border)));
+  }
+
+  int x_, y_, val_, size_;
+  double w_, sw_, border_[4];
+};
+
+
+struct Border2dError {
+  Border2dError(int val, int x, int y, double sw, int size, double border[4])
+      : val_(val), x_(x), y_(y), sw_(sw), size_(size) {
+        for(int i=0;i<4;i++)
+          border_[i] = border[i];
+      }
+
+/**
+ * used function: 
+ */
+  template <typename T>
+  bool operator()(const T* const p,
+                  T* residuals) const {
+    T sx2 = T(2.0)*p[0]*p[0];
+    T sy2 = T(2.0)*p[1]*p[1];
+    
+    //possible lower border
+    T lby2 = T(y_) - T(size_);
+    lby2 = lby2*lby2;
+    T lb = exp(-lby2/sy2);
+    lb = lb * (T(border_[0])-p[2]);
+    
+    T rbx2 = T(x_) - T(size_);
+    rbx2 = rbx2*rbx2;
+    T rb = exp(-rbx2/sx2);
+    rb = rb * (T(border_[1])-p[2]);
+    
+    T uby2 = T(y_);
+    uby2 = uby2*uby2;
+    T ub = exp(-uby2/sy2);
+    ub = ub * (T(border_[2])-p[2]);
+    
+    T lbx2 = T(x_);
+    lbx2 = lbx2*lbx2;
+    T leb = exp(-lbx2/sx2);
+    leb = leb * (T(border_[3])-p[2]);
+    
+    //want to us sqrt(x2+y2)+T(1.0) but leads to invalid jakobian?
+    //T d = sqrt(x2+y2+T(0.0001)) + T(w_);
+    //T d = exp(-(x2/T(w_)+y2/T(w_)))+T(sw_)+T(1.0);
+    //non-weighted leads to better overall estimates?
+    residuals[0] = (T(val_) - (p[2] + lb + rb + ub + leb))*T(sw_);
+    
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(int val, int x, int y, double sw, int size, double border[4]) {
+    return (new ceres::AutoDiffCostFunction<Border2dError, 1, 3>(
+                new Border2dError(val, x, y, sw, size, border)));
+  }
+
+  int val_, x_, y_, size_;
+  double sw_;
+  double border_[4];
+};
+
+template <typename T> T clamp(const T& n, const T& lower, const T& upper)
+{
+  return std::max(lower, std::min(n, upper));
+}
 
 void draw_gauss(Mat &img, double *p)
 {
@@ -442,7 +576,49 @@ void draw_gauss(Mat &img, double *p)
     }
 }
 
-void draw_gauss_border(Mat &img, double *p)
+void draw_gauss_border(Mat &img, double *p, double *border)
+{
+  int size = img.size().width;
+  
+  img = Mat(size, size, CV_8U);
+  
+  for(int y=0;y<size;y++)
+    for(int x=0;x<size;x++) {
+      double x2 = x-p[0];
+      double y2 = y-p[1];
+      x2 = x2*x2;
+      y2 = y2*y2;
+      double sx2 = 2.0*p[3]*p[3];
+      double sy2 = 2.0*p[4]*p[4];
+      //printf("%dx%d %f\n", );
+      
+      //possible lower border
+      double lby2 = y - size+1;
+      lby2 = lby2*lby2;
+      double lb = exp(-lby2/sy2);
+      lb = lb*(border[0]-p[5]);
+      
+      double uby2 = y;
+      uby2 = uby2*uby2;
+      double ub = exp(-uby2/sy2);
+      ub = ub*(border[2]-p[5]);
+      
+      double rbx2 = x - size+1;
+      rbx2 = rbx2*rbx2;
+      double rb = exp(-rbx2/sx2);
+      rb = rb*(border[1]-p[5]);
+      
+      double lbx2 = x;
+      lbx2 = lbx2*lbx2;
+      double leb = exp(-lbx2/sx2);
+      leb = leb*(border[3]-p[5]);
+      
+      img.at<uchar>(y, x) = p[5] + lb+ub+rb+leb + p[2]*exp(-(x2/sx2+y2/sy2));
+    }
+}
+
+
+void draw_border(Mat &img, double *p, double border[4])
 {
   int size = img.size().width;
   
@@ -459,23 +635,30 @@ void draw_gauss_border(Mat &img, double *p)
       //printf("%dx%d %f\n", );
   
       //possible lower border
-      double lby2 = y - p[6];
+      double lby2 = y - size+1;
       lby2 = lby2*lby2;
       double lb = exp(-lby2/sy2);
+      lb = lb*(border[0]-p[5]);
       
-      double uby2 = y - p[8];
+      double uby2 = y;
       uby2 = uby2*uby2;
       double ub = exp(-uby2/sy2);
+      ub = ub*(border[2]-p[5]);
       
-      double rbx2 = x - p[7];
+      double rbx2 = x - size+1;
       rbx2 = rbx2*rbx2;
       double rb = exp(-rbx2/sx2);
+      rb = rb*(border[1]-p[5]);
       
-      double lbx2 = x - p[9];
+      double lbx2 = x;
       lbx2 = lbx2*lbx2;
       double leb = exp(-lbx2/sx2);
+      leb = leb*(border[3]-p[5]);
       
-      img.at<uchar>(y, x) = p[5] + p[2]*(lb+ub+rb+leb+exp(-(x2/sx2+y2/sy2)));
+      if (!x)
+        printf("%f %f : %f %f %f %f - %f\n", leb, ub, border[0], border[1],border[2],border[3], p[5]);
+      
+      img.at<uchar>(y, x) = clamp<double>(p[5] + lb+ub+rb+leb,0,255.0);
     }
 }
 
@@ -517,6 +700,7 @@ double fit_gauss(Mat &img, double *params)
   
   //background
   params[5] = sum / (4*(size-2*b-1));
+  printf("bg: %d / %d = %f\n", sum, 4*(size-2*b-1), params[5]);
   
   //amplitude
   params[2] = ptr[size/2*(size+1)]-params[5];
@@ -529,11 +713,6 @@ double fit_gauss(Mat &img, double *params)
     debug_counter++;*/
     
     return FLT_MAX;
-  }
-  
-  if (params[2] > params[5]) {
-    params[2] += 10;
-    params[5] -= 10;
   }
   
   //spread
@@ -551,7 +730,7 @@ double fit_gauss(Mat &img, double *params)
       double y2 = y-size*0.5;
       x2 = x2*x2;
       y2 = y2*y2;
-      double s2 = size*0.5;
+      double s2 = size*0.25;
       s2=s2*s2;
       double s = exp(-x2/s2-y2/s2);
       ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, s, size*size*0.25);
@@ -577,13 +756,77 @@ double fit_gauss(Mat &img, double *params)
     
     for(int i=0;i<6;i++)
       params[i] = params_cpy[i];
-  
-    //borders
-    params[6] = size+1;
-    params[7] = size+1;
-    params[8] = -1;
-    params[9] = -1;
-  
+    
+    int b3 = size/3;
+    int size_b = size-b3-b3;
+    
+    double border[4];
+    
+    double sum = 0;
+    int y=size-1;
+    int x;
+    for(x=b3;x<size-b3;x++)
+      sum += ptr[y*size+x];
+    border[0] = sum/size_b;
+    
+    sum = 0;
+    x=size-1;
+    for(y=b3;y<size-b3;y++)
+      sum += ptr[y*size+x];
+    border[1] = sum/size_b;
+    
+    sum = 0;
+    y=0;
+    for(x=b3;x<size-b3;x++)
+      sum += ptr[y*size+x];
+    border[2] = sum/size_b;
+    
+    sum = 0;
+    x=0;
+    for(y=b3;y<size-b3;y++)
+      sum += ptr[y*size+x];
+    border[3] = sum/size_b;
+    
+    /*if (params[2] > 0)
+      for(int i=0;i<4;i++)
+        border[i] = max(border[i], params[5]);
+    else
+      for(int i=0;i<4;i++)
+        border[i] = min(border[i], params[5]);*/
+      
+    double params_common;
+    double params_border;
+      
+    /*ceres::Problem problem_border;
+    for(y=0;y<size-0;y++)
+      for(x=0;x<size-0;x++) {
+        double x2 = x-size*0.5;
+        double y2 = y-size*0.5;
+        x2 = x2*x2;
+        y2 = y2*y2;
+        double s2 = size;
+        s2=s2*s2;
+        double s = 1.0-exp(-x2/s2-y2/s2);
+        ceres::CostFunction* cost_function = Border2dError::Create(ptr[y*size+x], x, y, s, size-1, border);
+        problem_border.AddResidualBlock(cost_function, NULL, params+3);
+      }
+    ceres::Solve(options, &problem_border, &summary2);
+    //std::cout << summary2.FullReport() << "\n";*/
+    
+    char buf[64];
+    sprintf(buf, "point%07d.png", debug_counter);
+    imwrite(buf, img);
+    
+    Mat paint = img.clone();
+    /*draw_border(paint, params, border);
+    sprintf(buf, "point%07d_fit.png", debug_counter);
+    imwrite(buf, paint);*/
+    
+    //spread
+    params[3] = size*0.1;
+    params[4] = size*0.1;
+    printf("start amplitude %f\n", params[2]);
+    
     ceres::Problem problem_gauss_border;
     for(y=0;y<size-0;y++)
       for(x=0;x<size-0;x++) {
@@ -591,23 +834,21 @@ double fit_gauss(Mat &img, double *params)
         double y2 = y-size*0.5;
         x2 = x2*x2;
         y2 = y2*y2;
-        double s2 = size*0.5;
+        double s2 = size;
         s2=s2*s2;
         double s = exp(-x2/s2-y2/s2);
-        ceres::CostFunction* cost_function = GaussBorder2dError::Create(ptr[y*size+x], x, y, s, size*size*0.25);
+        ceres::CostFunction* cost_function = GaussBorder2dError::Create(ptr[y*size+x], x, y, s, size*size*0.25, size-1, border);
         problem_gauss_border.AddResidualBlock(cost_function, NULL, params);
       }
     ceres::Solve(options, &problem_gauss_border, &summary2);
     std::cout << summary2.FullReport() << "\n";
-    printf("%f %f %f %f %f %f (%d)\n", params[0], params[1], params[6],params[7],params[8],params[9], debug_counter);
+    
+    printf("%f %f %f %f %f %f (%d) b:%f a:%f\n", params[0], params[1], params[6],params[7],params[8],params[9], debug_counter, params[5], params[2]);
     summary = summary2;
     
-    char buf[64];
-    sprintf(buf, "point%07d.png", debug_counter);
-    imwrite(buf, img);
-    draw_gauss_border(img, params);
-    sprintf(buf, "point%07d_fit.png", debug_counter);
-    imwrite(buf, img);
+    draw_gauss_border(paint, params, border);
+    sprintf(buf, "point%07d_fitg.png", debug_counter);
+    imwrite(buf, paint);
     debug_counter++;
   }
   
@@ -691,7 +932,7 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
         //char buf[64];
         //sprintf(buf, "point%07d_%0d_%d.png", i, x, y);
         //imwrite(buf, proj);
-        double params[10];
+        double params[14];
         double rms = fit_gauss(proj, params);
         if (rms >= 100.0)
           continue;
@@ -773,7 +1014,7 @@ void detect_sub_corners2(Mat &img, vector<Corner> corners, vector<Corner> &corne
         //char buf[64];
         //sprintf(buf, "point%07d_%0d_%d.png", i, x, y);
         //imwrite(buf, proj);
-        double params[6];
+        double params[14];
         double rms = fit_gauss(proj, params);
         if (rms >= 100.0)
           continue;
