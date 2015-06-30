@@ -20,7 +20,8 @@ const bool use_rgb = false;
 
 const bool demosaic = false;
 
-const float subfit_oversampling = 1.5;
+const float subfit_oversampling = 2.0;
+const float min_fit_contrast = 3.0;
 
 #include <stdarg.h>
 
@@ -154,7 +155,7 @@ void calibrate_channel(vector<vector<Point2f> > &img_points, vector<vector<Point
     paint = img.clone();
   for(int i=0;i<projected.size();i++) {
     Point2f d = projected[i] - img_points[0][i];
-    line(paint, img_points[0][i], img_points[0][i]+100*d, Scalar(0,0,255));
+    line(paint, img_points[0][i], img_points[0][i]+10*d, Scalar(0,0,255));
   }
   imwrite("off_hdm.png", paint);
 }
@@ -330,8 +331,8 @@ bool corner_find_off_save(vector<Corner> &corners, Corner ref, int x, int y, Poi
 
 
 struct Gauss2dError {
-  Gauss2dError(int val, int x, int y, double w)
-      : val_(val), x_(x), y_(y), w_(w) {}
+  Gauss2dError(int val, int x, int y, double sw, double w)
+      : val_(val), x_(x), y_(y), sw_(sw), w_(w) {}
 
 /**
  * used function: 
@@ -346,23 +347,46 @@ struct Gauss2dError {
     x2 = x2*x2;
     y2 = y2*y2;
     //want to us sqrt(x2+y2)+T(1.0) but leads to invalid jakobian?
-    T d = sqrt(x2+y2+T(0.0001)) + T(w_);
+    //T d = sqrt(x2+y2+T(0.0001)) + T(w_);
+    //T d = exp(-(x2/T(w_)+y2/T(w_)))+T(sw_);
     //non-weighted leads to better overall estimates?
-    residuals[0] = (T(val_) - p[5] - p[2]*exp(-(x2/sx2+y2/sy2)))/d;
+    residuals[0] = (T(val_) - p[5] - p[2]*exp(-(x2/sx2+y2/sy2)))*T(sw_);
     
     return true;
   }
 
   // Factory to hide the construction of the CostFunction object from
   // the client code.
-  static ceres::CostFunction* Create(int val, int x, int y, double w) {
+  static ceres::CostFunction* Create(int val, int x, int y, double sw, double w) {
     return (new ceres::AutoDiffCostFunction<Gauss2dError, 1, 6>(
-                new Gauss2dError(val, x, y, w)));
+                new Gauss2dError(val, x, y, sw, w)));
   }
 
   int x_, y_, val_;
-  double w_;
+  double w_, sw_;
 };
+
+
+void draw_gauss(Mat &img, double *p)
+{
+  int size = img.size().width;
+  
+  img = Mat(size, size, CV_8U);
+  
+  for(int y=0;y<size;y++)
+    for(int x=0;x<size;x++) {
+      double x2 = x-p[0];
+      double y2 = y-p[1];
+      x2 = x2*x2;
+      y2 = y2*y2;
+      double sx2 = 2.0*p[3]*p[3];
+      double sy2 = 2.0*p[4]*p[4];
+      //printf("%dx%d %f\n", );
+      img.at<uchar>(y, x) = p[5] + p[2]*exp(-(x2/sx2+y2/sy2));
+    }
+}
+
+int debug_counter = 0;
 
 /**
  * Fit 2d gaussian to image, 5 parameter: \f$x_0\f$, \f$y_0\f$, amplitude, spread, background
@@ -402,15 +426,32 @@ double fit_gauss(Mat &img, double *params)
   //amplitude
   params[2] = ptr[size/2*(size+1)]-params[5];
   
+  if (abs(params[2]) < min_fit_contrast) {
+    /*printf("%d-%f = %f, %d\n", ptr[size/2*(size+1)],params[5], params[2], debug_counter);
+    char buf[64];
+    sprintf(buf, "lowc%07d.png", debug_counter);
+    imwrite(buf, img);
+    debug_counter++;*/
+    
+    return FLT_MAX;
+  }
+  
   //spread
-  params[3] = size/5;
-  params[4] = size/5;
+  params[3] = size*0.2;
+  params[4] = size*0.2;
 
   
   ceres::Problem problem_gauss;
   for(y=b;y<size-b;y++)
     for(x=b;x<size-b;x++) {
-      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, size*0.2);
+      double x2 = x-size*0.5;
+      double y2 = y-size*0.5;
+      x2 = x2*x2;
+      y2 = y2*y2;
+      double s2 = size*0.5;
+      s2=s2*s2;
+      double s = exp(-x2/s2-y2/s2);
+      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, s, size*size*0.25);
       problem_gauss.AddResidualBlock(cost_function, NULL, params);
     }
   
@@ -429,32 +470,26 @@ double fit_gauss(Mat &img, double *params)
   
   //std::cout << summary.FullReport() << "\n";
   
-  if (summary.termination_type == ceres::CONVERGENCE && params[0] > b && params[0] < size-b-1 && params[1] > b && params[1] < size-b-1) 
+  if (summary.termination_type == ceres::CONVERGENCE && params[0] > b && params[0] < size-0-1 && params[1] > 0 && params[1] < size-0-1) {
+    //printf("%f %f (%d)- %f %f\n", params[0], params[1], size, params[3], params[4]);
     return sqrt(summary.final_cost/problem_gauss.NumResiduals());
+  }
   else {
     //std::cout << summary.FullReport() << "\n";
+    //printf("%f x %f\n", params[0], params[1]);
     //printf("%f\n",sqrt(summary.final_cost/problem_gauss.NumResiduals()));
+    //printf("%f %f (%d)- %f %f, %d\n", params[0], params[1], size, params[3], params[4], debug_counter);
+    
+    /*char buf[64];
+    sprintf(buf, "point%07d.png", debug_counter);
+    imwrite(buf, img);
+    draw_gauss(img, params);
+    sprintf(buf, "point%07d_fit.png", debug_counter);
+    imwrite(buf, img);
+    debug_counter++;*/
+    
     return FLT_MAX;
   }
-}
-
-void draw_gauss(Mat &img, double *p)
-{
-  int size = img.size().width;
-  
-  img = Mat(size, size, CV_8U);
-  
-  for(int y=0;y<size;y++)
-    for(int x=0;x<size;x++) {
-      double x2 = x-p[0];
-      double y2 = y-p[1];
-      x2 = x2*x2;
-      y2 = y2*y2;
-      double sx2 = 2.0*p[3]*p[3];
-      double sy2 = 2.0*p[4]*p[4];
-      //printf("%dx%d %f\n", );
-      img.at<uchar>(y, x) = p[5] + p[2]*exp(-(x2/sx2+y2/sy2));
-    }
 }
 
 void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, Mat &paint)
@@ -515,7 +550,7 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
         //imwrite(buf, proj);
         double params[6];
         double rms = fit_gauss(proj, params);
-        if (rms >= 5.0)
+        if (rms >= 100.0)
           continue;
         //draw_gauss(proj, params);
         //sprintf(buf, "point%07d_%0d_%d_fit.png", i, x, y);
@@ -597,7 +632,7 @@ void detect_sub_corners2(Mat &img, vector<Corner> corners, vector<Corner> &corne
         //imwrite(buf, proj);
         double params[6];
         double rms = fit_gauss(proj, params);
-        if (rms >= 5.0)
+        if (rms >= 100.0)
           continue;
         //draw_gauss(proj, params);
         //sprintf(buf, "point%07d_%0d_%d_fit.png", i, x, y);
