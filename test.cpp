@@ -475,7 +475,7 @@ struct GaussBorder2dError2 {
     
     //want to us sqrt(x2+y2)+T(1.0) but leads to invalid jakobian?
     //T d = sqrt(x2+y2+T(0.0001)) + T(w_);
-    T d = T(sw_)+T(1.0);
+    T d = /*exp(-(x2/T(w_)+y2/T(w_)))*/ T(sw_)+T(1.0);
     //non-weighted leads to better overall estimates?
     residuals[0] = (T(val_) - (p[5] + lb +rb + leb + ub + p[2]*exp(-(x2/sx2+y2/sy2))))*d;
     
@@ -699,9 +699,6 @@ void draw_border(Mat &img, double *p, double border[4])
       double leb = exp(-lbx2/sx2);
       leb = leb*(border[3]-p[5]);
       
-      if (!x)
-        printf("%f %f : %f %f %f %f - %f\n", leb, ub, border[0], border[1],border[2],border[3], p[5]);
-      
       img.at<uchar>(y, x) = clamp<double>(p[5] + lb+ub+rb+leb,0,255.0);
     }
 }
@@ -744,7 +741,6 @@ double fit_gauss(Mat &img, double *params)
   
   //background
   params[5] = sum / (4*(size-2*b-1));
-  printf("bg: %d / %d = %f\n", sum, 4*(size-2*b-1), params[5]);
   
   //amplitude
   params[2] = ptr[size/2*(size+1)]-params[5];
@@ -857,19 +853,19 @@ double fit_gauss(Mat &img, double *params)
     ceres::Solve(options, &problem_border, &summary2);
     //std::cout << summary2.FullReport() << "\n";*/
     
-    char buf[64];
+    /*char buf[64];
     sprintf(buf, "point%07d.png", debug_counter);
     imwrite(buf, img);
     
     Mat paint = img.clone();
     draw_border(paint, params, border);
     sprintf(buf, "point%07d_fit.png", debug_counter);
-    imwrite(buf, paint);
+    imwrite(buf, paint);*/
     
     //spread
     params[3] = size*0.1;
     params[4] = size*0.1;
-    printf("start amplitude %f\n", params[2]);
+    //printf("start amplitude %f\n", params[2]);
     
     ceres::Problem problem_gauss_border;
     for(y=0;y<size-0;y++)
@@ -887,9 +883,9 @@ double fit_gauss(Mat &img, double *params)
     ceres::Solve(options, &problem_gauss_border, &summary2);
     //std::cout << summary2.FullReport() << "\n";
     
-    draw_gauss_border(paint, params, border);
+    /*draw_gauss_border(paint, params, border);
     sprintf(buf, "point%07d_fitg.png", debug_counter);
-    imwrite(buf, paint);
+    imwrite(buf, paint);*/
     
     //spread
     params[3] = size*0.1;
@@ -907,7 +903,7 @@ double fit_gauss(Mat &img, double *params)
         double s2 = size*0.5;
         s2=s2*s2;
         double s = exp(-x2/s2-y2/s2);
-        ceres::CostFunction* cost_function = GaussBorder2dError2::Create(ptr[y*size+x], x, y, s, size*size*0.25, size-1, border);
+        ceres::CostFunction* cost_function = GaussBorder2dError2::Create(ptr[y*size+x], x, y, s, size*size, size-1, border);
         problem_gauss_border2.AddResidualBlock(cost_function, NULL, params);
       }
     ceres::Solve(options, &problem_gauss_border2, &summary2);
@@ -916,10 +912,10 @@ double fit_gauss(Mat &img, double *params)
     //printf("%f %f %f (%d) b:%f a:%f\n", params[3], params[4], params[6],params[7],debug_counter, params[5], params[2]);
     summary = summary2;
     
-    draw_gauss_border2(paint, params, border);
+    /*draw_gauss_border2(paint, params, border);
     sprintf(buf, "point%07d_fitg2.png", debug_counter);
     imwrite(buf, paint);
-    debug_counter++;
+    debug_counter++;*/
   }
   
   //std::cout << summary.FullReport() << "\n";
@@ -1036,7 +1032,7 @@ void detect_sub_corners2(Mat &img, vector<Corner> corners, vector<Corner> &corne
   vector<Point2f> ipoints(4);
   vector<Point2f> cpoints(4);
   
-  for(int i=corners.size()-10;i<corners.size();i++) {
+  for(int i=0;i<corners.size();i++) {
     printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
     //printf("."); fflush(NULL);
     Mat proj;
