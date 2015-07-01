@@ -115,7 +115,7 @@ bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<
   }
   
   inliers.resize(world_points_check.size());
-  Mat hom = findHomography(img_points_check[0], world_points_check, CV_RANSAC, 2, inliers);
+  Mat hom = findHomography(img_points_check[0], world_points_check, CV_RANSAC, 30, inliers);
   
   //vector<Point2f> proj;
   //perspectiveTransform(img_points_check[0], proj, hom);
@@ -1010,7 +1010,7 @@ double fit_gauss(Mat &img, double *params)
   ceres::Solver::Summary summary;
   ceres::Solve(options, &problem_gauss, &summary);
   
-  if (summary.final_cost/problem_gauss.NumResiduals() >= refine_rms_limit*refine_rms_limit || summary.termination_type != ceres::CONVERGENCE || params[0] <= 0 || params[0] >= size-0-1 || params[1] <= 0 || params[1] >= size-0-1) {
+  if (0)/*(summary.final_cost/problem_gauss.NumResiduals() >= refine_rms_limit*refine_rms_limit || summary.termination_type != ceres::CONVERGENCE || params[0] <= 0 || params[0] >= size-0-1 || params[1] <= 0 || params[1] >= size-0-1)*/ {
     //printf("%f %f -> ", params[0], params[1]);
     ceres::Solver::Summary summary2;
     
@@ -1198,7 +1198,7 @@ double fit_gauss(Mat &img, double *params)
     ceres::Solve(options, &problem_gauss_border4, &summary2);
     //std::cout << summary2.FullReport() << "\n";
     
-    printf("%f %f %f %f\n", border_pos[0], border_pos[1], border_pos[2], border_pos[3]);
+    //printf("%f %f %f %f\n", border_pos[0], border_pos[1], border_pos[2], border_pos[3]);
     
     /*draw_gauss_border4(paint, params, border_col, border_pos);
     sprintf(buf, "point%07d_fitg4.png", debug_counter);
@@ -1236,14 +1236,12 @@ double fit_gauss(Mat &img, double *params)
 void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, Mat &paint)
 {
   int counter = 0;
+  vector<Point2f> ipoints(4);
   sort(corners.begin(), corners.end(), corner_cmp);
   
-  vector<Point2f> ipoints(4);
-  vector<Point2f> cpoints(4);
   
   for(int i=0;i<corners.size();i++) {
     printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
-    Mat proj;
     Corner c = corners[i];
     int size;
     
@@ -1274,12 +1272,13 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
 #pragma omp parallel for
     for(int y=0;y<5;y++)
       for(int x=0;x<5;x++) {
+        vector<Point2f> cpoints(4);
         cpoints[0] = Point2f(-x*size,-y*size);
         cpoints[1] = Point2f((5-x)*size,-y*size);
         cpoints[2] = Point2f((5-x)*size,(5-y)*size);
         cpoints[3] = Point2f(-x*size,(5-y)*size);
         
-        proj = Mat(size, size, CV_8U);
+        Mat proj = Mat(size, size, CV_8U);
         Mat pers = getPerspectiveTransform(ipoints, cpoints);
         Mat pers_i = getPerspectiveTransform(cpoints, ipoints);
         warpPerspective(img, proj, pers, Size(size, size), INTER_LINEAR);
@@ -1316,17 +1315,13 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
 
 void detect_sub_corners2(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, Mat &paint)
 {
-  int counter = 0;
-  
-  sort(corners.begin(), corners.end(), corner_cmp);
-  
+  int counter = 0;  
   vector<Point2f> ipoints(4);
-  vector<Point2f> cpoints(4);
+  sort(corners.begin(), corners.end(), corner_cmp);
   
   for(int i=0;i<corners.size();i++) {
     printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
     //printf("."); fflush(NULL);
-    Mat proj;
     Corner c = corners[i];
     int size;
     
@@ -1356,12 +1351,13 @@ void detect_sub_corners2(Mat &img, vector<Corner> corners, vector<Corner> &corne
 #pragma omp parallel for
     for(int y=0;y<5;y++)
       for(int x=0;x<5;x++) {
+        vector<Point2f> cpoints(4);
         cpoints[0] = Point2f((0.5-x)*size,(0.5-y)*size);
         cpoints[1] = Point2f((5.5-x )*size,(0.5-y)*size);
         cpoints[2] = Point2f((5.5-x )*size,(5.5-y )*size);
         cpoints[3] = Point2f((0.5-x)*size,(5.5-y )*size);
         
-        proj = Mat(size, size, CV_8U);
+        Mat proj = Mat(size, size, CV_8U);
         Mat pers = getPerspectiveTransform(ipoints, cpoints);
         Mat pers_i = getPerspectiveTransform(cpoints, ipoints);
         warpPerspective(img, proj, pers, Size(size, size), INTER_LINEAR);

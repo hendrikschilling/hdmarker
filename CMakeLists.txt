@@ -39,7 +39,7 @@ add_executable(hdmarker_generate marker_gen.cpp)
 add_executable(hdmarker_test test.cpp)
 #add_executable(hdmarker_scaletest testscales.cpp)
 target_link_libraries(hdmarker_generate ${OpenCV_LIBS} hdmarker)
-#set(CMAKE_CXX_FLAGS "-Wall -g -O3 -std=c++11 -Wall -fopenmp")
+set(CMAKE_CXX_FLAGS "-Wall -g -O3 -std=c++11 -Wall -fopenmp")
 target_link_libraries(hdmarker_test ${OpenCV_LIBS} ${CERES_LIBRARIES} hdmarker)
 #target_link_libraries(hdmarker_scaletest ${OpenCV_LIBS} hdmarker)
 
