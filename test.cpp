@@ -27,6 +27,8 @@ const float refine_rms_limit = 10000.0;
 
 const float rms_use_limit = 2.0;
 
+double max_accept_dist = 3.0;
+
 #include <stdarg.h>
 
 void printprogress(int curr, int max, int &last, const char *fmt = NULL, ...)
@@ -1010,7 +1012,10 @@ double fit_gauss(Mat &img, double *params)
   ceres::Solver::Summary summary;
   ceres::Solve(options, &problem_gauss, &summary);
   
-  if (0)/*(summary.final_cost/problem_gauss.NumResiduals() >= refine_rms_limit*refine_rms_limit || summary.termination_type != ceres::CONVERGENCE || params[0] <= 0 || params[0] >= size-0-1 || params[1] <= 0 || params[1] >= size-0-1)*/ {
+  Point2f v(params[0]-size*0.5, params[1]-size*0.5);
+  
+  if (false) {
+  //if (summary.termination_type != ceres::CONVERGENCE || norm(v)/subfit_oversampling > max_accept_dist) {
     //printf("%f %f -> ", params[0], params[1]);
     ceres::Solver::Summary summary2;
     
@@ -1211,7 +1216,9 @@ double fit_gauss(Mat &img, double *params)
   
   //std::cout << summary.FullReport() << "\n";
   
-  if (summary.termination_type == ceres::CONVERGENCE && params[0] > 0 && params[0] < size-0-1 && params[1] > 0 && params[1] < size-0-1) {
+  v = Point2f(params[0]-size*0.5, params[1]-size*0.5);
+  
+  if (summary.termination_type == ceres::CONVERGENCE && norm(v)/subfit_oversampling <= max_accept_dist /*params[0] > 0 && params[0] < size-0-1 && params[1] > 0 && params[1] < size-0-1*/) {
     //printf("%f %f (%d)- %f %f\n", params[0], params[1], size, params[3], params[4]);
     return sqrt(summary.final_cost/problem_gauss.NumResiduals());
   }
