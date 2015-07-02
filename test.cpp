@@ -361,9 +361,9 @@ struct Gauss2dError {
     
     //want to us sqrt(x2+y2)+T(1.0) but leads to invalid jakobian?
     //T d = sqrt(x2+y2+T(0.0001)) + T(w_);
-    T d = exp(-(x2/T(w_)+y2/T(w_)))+T(sw_);
+    //T d = exp(-(x2/T(w_)+y2/T(w_)))+T(sw_);
     //non-weighted leads to better overall estimates?
-    residuals[0] = (T(val_) - (p[5] + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*d;
+    residuals[0] = (T(val_) - (p[5] + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*T(sw_);
     
     return true;
   }
