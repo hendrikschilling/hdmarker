@@ -27,6 +27,8 @@ const float refine_rms_limit = 10000.0;
 
 const float rms_use_limit = 2.0;
 
+const double subfit_max_range = 0.3;
+
 double max_accept_dist = 3.0;
 
 #include <stdarg.h>
@@ -341,8 +343,8 @@ bool corner_find_off_save(vector<Corner> &corners, Corner ref, int x, int y, Poi
 
 
 struct Gauss2dError {
-  Gauss2dError(int val, int x, int y, double sw, double w)
-      : val_(val), x_(x), y_(y), sw_(sw), w_(w) {}
+  Gauss2dError(int val, int x, int y, double m, double sw, double w)
+      : val_(val), x_(x), y_(y), m_(m), sw_(sw), w_(w) {}
 
 /**
  * used function: 
@@ -350,8 +352,8 @@ struct Gauss2dError {
   template <typename T>
   bool operator()(const T* const p,
                   T* residuals) const {
-    T x2 = T(x_) - p[0];
-    T y2 = T(y_) - p[1];
+    T x2 = T(x_) - (T(m_)+sin(p[0])/T(subfit_oversampling)*T(subfit_max_range));
+    T y2 = T(y_) - (T(m_)+sin(p[1])/T(subfit_oversampling)*T(subfit_max_range));
     T sx2 = T(2.0)*p[3]*p[3];
     T sy2 = T(2.0)*p[4]*p[4];
     x2 = x2*x2;
@@ -361,20 +363,53 @@ struct Gauss2dError {
     //T d = sqrt(x2+y2+T(0.0001)) + T(w_);
     T d = exp(-(x2/T(w_)+y2/T(w_)))+T(sw_);
     //non-weighted leads to better overall estimates?
-    residuals[0] = (T(val_) - (p[5] + p[2]*exp(-(x2/sx2+y2/sy2))))*d;
+    residuals[0] = (T(val_) - (p[5] + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*d;
     
     return true;
   }
 
   // Factory to hide the construction of the CostFunction object from
   // the client code.
-  static ceres::CostFunction* Create(int val, int x, int y, double sw, double w) {
+  static ceres::CostFunction* Create(int val, int x, int y, double m, double sw, double w) {
     return (new ceres::AutoDiffCostFunction<Gauss2dError, 1, 6>(
-                new Gauss2dError(val, x, y, sw, w)));
+                new Gauss2dError(val, x, y, m, sw, w)));
   }
 
   int x_, y_, val_;
-  double w_, sw_;
+  double w_, sw_, m_;
+};
+
+
+struct GaussError {
+  GaussError(float val, int x, double m, double sw, double w)
+      : val_(val), x_(x), m_(m), sw_(sw), w_(w) {}
+
+/**
+ * used function: 
+ */
+  template <typename T>
+  bool operator()(const T* const p,
+                  T* residuals) const {
+    T x2 = T(x_) - (T(m_)+sin(p[0])/T(subfit_oversampling));
+    T s2 = T(2.0)*p[1]*p[1];
+    x2 = x2*x2;
+    
+    T w = 0.5*exp(-x2/T(w_)) + T(sw_) + T(0.5);
+    residuals[0] = (T(val_) - (p[2] + (p[3]-p[2])*exp(-x2/s2)))*w;
+    
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(int val, int x, double m, double sw, double w) {
+    return (new ceres::AutoDiffCostFunction<GaussError, 1, 4>(
+                new GaussError(val, x, m, sw, w)));
+  }
+
+  int x_;
+  float val_;
+  double sw_, w_, m_;
 };
 
 
@@ -587,22 +622,22 @@ struct GaussBorder2dError4 {
     //T fg = p[2]-p[5];
     
     //possible lower border
-    T lby2 = T(y_) - T(size_) - sin(pos[0])*T(size_)*T(0.2);
+    T lby2 = T(y_) - T(size_) - sin(pos[0])*T(size_)*T(0.3);
     lby2 = lby2*lby2;
     T lb = exp(-lby2/bsy2);
     lb = lb * (b[0]-p[5]);
     
-    T rbx2 = T(x_) - T(size_) - sin(pos[1])*T(size_)*T(0.2);
+    T rbx2 = T(x_) - T(size_) - sin(pos[1])*T(size_)*T(0.3);
     rbx2 = rbx2*rbx2;
     T rb = exp(-rbx2/bsx2);
     rb = rb * (b[1]-p[5]);
     
-    T uby2 = T(y_) - sin(pos[2])*T(size_)*T(0.2);
+    T uby2 = T(y_) - sin(pos[2])*T(size_)*T(0.3);
     uby2 = uby2*uby2;
     T ub = exp(-uby2/bsy2);
     ub = ub * (b[2]-p[5]);
     
-    T lbx2 = T(x_) - sin(pos[3])*T(size_)*T(0.2);
+    T lbx2 = T(x_) - sin(pos[3])*T(size_)*T(0.3);
     lbx2 = lbx2*lbx2;
     T leb = exp(-lbx2/bsx2);
     leb = leb * (b[3]-p[5]);
@@ -646,15 +681,15 @@ struct GaussBorder2dError5 {
     y2 = y2*y2;
     
     //move extra border gauss distribution some way away from center
-    T d2 = T(size_)*1.0+b[0]*b[0];
+    T d2 = T(size_)*0.5+b[0]*b[0];
     T bx = d2*cos(b[1]);
     T by = d2*sin(b[1]);
     
     bx += T(size_)*0.5;
     by += T(size_)*0.5;
     
-    bx = T(x_) - bx;
-    by = T(y_) - by;
+    bx = (T(x_) - bx)*b[3];
+    by = (T(y_) - by)*b[4];
     bx = bx*bx;
     by = by*by;
     
@@ -664,8 +699,8 @@ struct GaussBorder2dError5 {
     
     T border = exp(-(bx/bs2+by/bs2));
     
-    T d = T(sw_)+T(1.0);
-    residuals[0] = (T(val_) - (p[5] + (b[3]-p[5])*border + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*d;
+    T d = 0.5*exp(-(x2/T(w_)+y2/T(w_)))+0.5*T(sw_)/*+T(1.0)*/;
+    residuals[0] = (T(val_) - (p[5] + (b[5]-p[5])*border + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*d;
     
     return true;
   }
@@ -673,7 +708,7 @@ struct GaussBorder2dError5 {
   // Factory to hide the construction of the CostFunction object from
   // the client code.
   static ceres::CostFunction* Create(int val, int x, int y, double sw, double w, int size) {
-    return (new ceres::AutoDiffCostFunction<GaussBorder2dError5, 1, 6, 4>(
+    return (new ceres::AutoDiffCostFunction<GaussBorder2dError5, 1, 6, 6>(
                 new GaussBorder2dError5(val, x, y, sw, w, size)));
   }
 
@@ -1019,9 +1054,9 @@ double fit_gauss(Mat &img, double *params)
   params[5] = sum / (4*(size-2*b-1));
   
   //amplitude
-  params[2] = ptr[size/2*(size+1)]-params[5];
+  params[2] = ptr[size/2*(size+1)];
   
-  if (abs(params[2]) < min_fit_contrast) {
+  if (abs(params[2]-params[5]) < min_fit_contrast) {
     /*printf("%d-%f = %f, %d\n", ptr[size/2*(size+1)],params[5], params[2], debug_counter);
     char buf[64];
     sprintf(buf, "lowc%07d.png", debug_counter);
@@ -1049,7 +1084,7 @@ double fit_gauss(Mat &img, double *params)
       double s2 = size*0.25;
       s2=s2*s2;
       double s = exp(-x2/s2-y2/s2);
-      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, s, size*size*0.25);
+      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, size*0.5, s, size*size*0.25);
       problem_gauss.AddResidualBlock(cost_function, NULL, params);
     }
   
@@ -1066,27 +1101,33 @@ double fit_gauss(Mat &img, double *params)
   ceres::Solver::Summary summary;
   ceres::Solve(options, &problem_gauss, &summary);
   
+  params[0] = size*0.5+sin(params[0])/subfit_oversampling*subfit_max_range;
+  params[1] = size*0.5+sin(params[1])/subfit_oversampling*subfit_max_range;
+  
   Point2f v(params[0]-size*0.5, params[1]-size*0.5);
   
-  //if (false) {
-  if (summary.termination_type != ceres::CONVERGENCE || norm(v)/subfit_oversampling > max_accept_dist) {
-    for(int i=0;i<6;i++)
+  if (false) {
+  //if (summary.termination_type != ceres::CONVERGENCE || norm(v)/subfit_oversampling > max_accept_dist) {
+    /*for(int i=0;i<6;i++)
       params[i] = params_cpy[i];
     
-    double border[5];
-    //angle
-    border[0] = 0.0;
+    double border[6];
     //distance
+    border[0] = 0.0;
+    //angle
     border[1] = 0.0;
-    //soread
+    //spread
     border[2] = size*0.5;
-    border[3] = params[2] + params[5];
+    //border[3] = params[2] + params[5];
     
-    params[2] = params[2] + params[5];
+    params[3] = 1.0;
+    params[4] = 1.0;
+    
+    params[5] = params[2] + params[5];
     
     ceres::Problem problem_gauss_border5;
-    for(y=0;y<size-0;y++)
-      for(x=0;x<size-0;x++) {
+    for(y=b;y<size-b;y++)
+      for(x=b;x<size-b;x++) {
         double x2 = x-size*0.5;
         double y2 = y-size*0.5;
         x2 = x2*x2;
@@ -1098,7 +1139,7 @@ double fit_gauss(Mat &img, double *params)
         problem_gauss_border5.AddResidualBlock(cost_function, NULL, params, border);
       }
       
-    ceres::Solve(options, &problem_gauss_border5, &summary);
+    ceres::Solve(options, &problem_gauss_border5, &summary);*/
     
     //printf("%f %f -> ", params[0], params[1]);
     /*ceres::Solver::Summary summary2;
@@ -1226,12 +1267,12 @@ double fit_gauss(Mat &img, double *params)
     imwrite(buf, paint);*/
     
     //fit border color!
-    /*double border_col[8];
+    double border_col[8];
     for(int i=0;i<4;i++)
-      border_col[i] = border[i];
+      border_col[i] = 0.0;
     
     //make amplitude absolute
-    params[2] = params[2]+params[5];*/
+    params[2] = params[2]+params[5];
     
     //reset spread
     /*params[3] = size*0.1;
@@ -1261,7 +1302,7 @@ double fit_gauss(Mat &img, double *params)
     imwrite(buf, paint);*/
     
     //reset spread
-    /*params[3] = size*0.1;
+    params[3] = size*0.1;
     params[4] = size*0.1;
     params[6] = params[3];
     params[7] = params[4];
@@ -1284,7 +1325,7 @@ double fit_gauss(Mat &img, double *params)
         problem_gauss_border4.AddResidualBlock(cost_function, NULL, params, border_col, border_pos);
       }
       
-    ceres::Solve(options, &problem_gauss_border4, &summary2);*/
+    ceres::Solve(options, &problem_gauss_border4, &summary);
     //std::cout << summary2.FullReport() << "\n";
     
     //printf("%f %f %f %f\n", border_pos[0], border_pos[1], border_pos[2], border_pos[3]);
@@ -1322,6 +1363,119 @@ double fit_gauss(Mat &img, double *params)
     
     return FLT_MAX;
   }
+}
+
+void draw_gauss1d(Mat &img, double *p)
+{
+  for(int i=0;i<img.total();i++) {
+    double x2 = i - p[0];
+    double s2 = 2.0*p[1]*p[1];
+    x2 = x2*x2;
+    
+    img.at<float>(0, i) = clamp<int>(p[2] + (p[3]-p[2])*exp(-x2/s2), 0, 255);
+  }
+}
+
+double fit_gauss1d(Mat &img, double &rms)
+{
+  int size = img.total();
+  double params[5];
+  int b = 0;//size*0.2;
+  float *ptr = img.ptr<float>(0);
+  
+  
+  params[0] = img.total() * 0.5;
+  params[1] = img.total() * 0.1;
+  
+  params[2] = (ptr[b] + ptr[size-b-1])*0.5;
+  params[3] = (ptr[size/2]+ptr[(size+1)/2])*0.5;
+  
+  Mat paint = img.clone();
+  char buf[64];
+  sprintf(buf, "point%07d_h.png", debug_counter);
+  imwrite(buf, img);
+  
+  draw_gauss1d(paint, params);
+  sprintf(buf, "point%07d_start.png", debug_counter);
+  imwrite(buf, paint);
+  
+  ceres::Problem problem;
+  for(int i=b;i<img.total()-b;i++) {
+      double x2 = i-img.total()*0.5;
+      x2 = x2*x2;
+      double s2 = img.total()*0.5;
+      s2=s2*s2;
+      double sw = exp(-x2/s2);
+      ceres::CostFunction* cost_function = GaussError::Create(ptr[i], i, size*0.5, sw, size*size*0.5*0.5);
+      problem.AddResidualBlock(cost_function, NULL, params);
+  }
+    
+  ceres::Solver::Options options;
+  options.max_num_iterations = 1000;
+  
+  ceres::Solver::Summary summary;
+  ceres::Solve(options, &problem, &summary);
+  
+  rms = sqrt(summary.final_cost/problem.NumResiduals());  
+
+  draw_gauss1d(paint, params);
+  sprintf(buf, "point%07d_fit.png", debug_counter);
+  imwrite(buf, paint);
+  
+  printf("debug %d rms %f\n", debug_counter, rms);
+  
+  debug_counter++;
+  
+  return params[0];
+}
+
+/**
+ * Fit 2d gaussian to image, 5 parameter: \f$x_0\f$, \f$y_0\f$, amplitude, spread, background
+ * disregards a border of \f$\lfloor \mathit{size}/5 \rfloor\f$ pixels
+ */
+double fit_gauss2(Mat &img, double *params)
+{
+  int size = img.size().width;
+  assert(img.size().height == size);
+  int b = size/5;
+  uint8_t *ptr = img.ptr<uchar>(0);
+  
+  assert(img.depth() == CV_8U);
+  assert(img.channels() == 1);
+  
+  double params_cpy[6];
+  
+  Mat oned;
+  
+  Mat imgf;
+  
+  img.convertTo(imgf, CV_32F);
+  
+  resize(imgf, oned, Size(size, 1), INTER_AREA);
+  normalize(oned, oned, 0, 255.0, NORM_MINMAX, CV_32FC1);
+  
+  double rms;
+  
+  char buf[64];
+  sprintf(buf, "point%07d_2d.png", debug_counter);
+  imwrite(buf, img);
+  
+  params[0] = fit_gauss1d(oned, rms);
+  params[1] = size*0.5;
+  
+  Point2f v = Point2f(params[0]-size*0.5, params[1]-size*0.5);
+  
+  if (rms <= 10.0)
+    return 0.0;
+  else
+    return FLT_MAX;
+  
+  /*if (summary.termination_type == ceres::CONVERGENCE && norm(v)/subfit_oversampling <= max_accept_dist) {
+    return sqrt(summary.final_cost/problem_gauss.NumResiduals());
+  }
+  else {    
+    return FLT_MAX;
+  }*/
 }
 
 void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, Mat &paint)
@@ -1459,7 +1613,7 @@ void detect_sub_corners2(Mat &img, vector<Corner> corners, vector<Corner> &corne
         //sprintf(buf, "point%07d_%0d_%d.png", i, x, y);
         //imwrite(buf, proj);
         double params[14];
-        //printf("debug id %d = output point %d ", debug_counter, corners_out.size());
+        //printf("debug id %d = %fx%f\n", debug_counter, ipoints[0].x, ipoints[0].y);
         double rms = fit_gauss(proj, params);
         //printf("rms %f\n", rms);
         if (rms >= rms_use_limit)
