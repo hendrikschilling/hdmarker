@@ -126,7 +126,7 @@ class Marker {
     //static void detect(cv::Mat &img, std::vector<Marker> &markers);
     //static void detect(cv::Mat &img, std::vector<Corner> &corners);
     //static void detect_minscale(cv::Mat &img, cv::Mat &paint, std::vector<Corner> &corners, int scale_min = 8);
-    static void detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_max = 0, int marker_size_min = 5, float effort = 0.5, int mincount = 10, std::vector<cv::Mat> *scales = NULL);
+    static void detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_max = 0, int marker_size_min = 5, float effort = 0.5, int mincount = 10, std::vector<cv::Mat> *scales = NULL, std::vector<cv::Mat> *scales_border = NULL);
     static void detect(cv::Mat img, std::vector<Corner> &corners, bool use_rgb = false, int marker_size_max = 0, int marker_size_min = 5, float effort = 0.5, int mincount = 10);
     static void detect_minscale(cv::Mat &img, cv::Mat &paint, std::vector<Corner> &corners, int scale_min = 8);
 };

@@ -1130,7 +1130,10 @@ void Marker_Corner::cornerSubPixCPMask( InputArray _image, Point2f &p,
     void Marker_Corner::refine_gradient(Mat &img, float scale)
     {
       //cornerSubPixCP(img, p, Size(size/6,size/6), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
-      cornerSubPixCPMask(img, p, Size(size/4,size/4), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
+      int s = size/4;
+      if (s > 10)
+        s = 10;
+      cornerSubPixCPMask(img, p, Size(s,s), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
     }
     
     
@@ -3979,7 +3982,7 @@ void line_dir_checker_score(Mat &img, Mat &paint)
     }
 }
 
-void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_max, int marker_size_min, float effort, int mincount, vector<Mat> *scales)
+void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_max, int marker_size_min, float effort, int mincount, vector<Mat> *scales, vector<Mat> *scales_border)
 {
   microbench_init();
   Mat paint;
@@ -4001,7 +4004,6 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
   int found;
   int lowest_scale;
   bool free_scales = false;
-  vector<Mat> scales_border;
   
   allcorners.resize(512);
   allmarkers.resize(512);
@@ -4023,13 +4025,16 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
   else
     scales->resize(log2(scale_min)+3);
   
-  scales_border.resize(log2(scale_min)+3);
+  if (!scales_border)
+    scales = new vector<Mat>(log2(scale_min)+3);
+  else
+    scales_border->resize(log2(scale_min)+3);
 
   norms.resize(log2(scale_min)+3);
   checkers.resize(log2(scale_min)+3);
   (*scales)[1] = img;
   
-  copyMakeBorder((*scales)[1], scales_border[1], border, border, border, border, BORDER_REPLICATE);
+  copyMakeBorder((*scales)[1], (*scales_border)[1], border, border, border, border, BORDER_REPLICATE);
   //scales_border[1] = (*scales)[1];
   
   //TODO for existing scales input check if images are already contained!
@@ -4039,15 +4044,15 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
     GaussianBlur((*scales)[idx],blurred,Size(3, 3), 0);
     //blur((*scales)[idx],blurred,Size(3, 3));
     resize(blurred, (*scales)[idx+1], Size((*scales)[idx].size().width/2,(*scales)[idx].size().height/2), INTER_NEAREST);
-    copyMakeBorder((*scales)[idx+1], scales_border[idx+1], border, border, border, border, BORDER_REPLICATE);
+    copyMakeBorder((*scales)[idx+1], (*scales_border)[idx+1], border, border, border, border, BORDER_REPLICATE);
     //scales_border[idx+1] = (*scales)[idx+1];
   }
   microbench_measure_output("scale");
   
-  norms[lowest_scale_idx].create(scales_border[lowest_scale_idx].size(), CV_8UC1);
-  checkers[lowest_scale_idx].create(scales_border[lowest_scale_idx].size(), CV_8UC1);
+  norms[lowest_scale_idx].create((*scales_border)[lowest_scale_idx].size(), CV_8UC1);
+  checkers[lowest_scale_idx].create((*scales_border)[lowest_scale_idx].size(), CV_8UC1);
   //norm_avg_SIMD((*scales)[lowest_scale_idx], norms[lowest_scale_idx], marker_basesize);
-  localHistCont(scales_border[lowest_scale_idx], norms[lowest_scale_idx], marker_basesize);
+  localHistCont((*scales_border)[lowest_scale_idx], norms[lowest_scale_idx], marker_basesize);
   simpleChessCorner_SIMD(norms[lowest_scale_idx], checkers[lowest_scale_idx], chess_dist);
   
   
@@ -4060,14 +4065,14 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
 	float rs = 1.0;  
 	Mat rkern = (Mat_<float>(3, 3) << 0,-rs,0,-rs,4.0*rs+1.0,-rs,0,-rs,0);
 	filter2D((*scales)[0], (*scales)[0], (*scales)[0].depth(), rkern);
-        copyMakeBorder((*scales)[0], scales_border[0], border, border, border, border, BORDER_REPLICATE);
+        copyMakeBorder((*scales)[0], (*scales_border)[0], border, border, border, border, BORDER_REPLICATE);
         //scales_border[0] = (*scales)[0];
       }
       
-      norms[scale_idx].create(scales_border[scale_idx].size(), CV_8UC1);
-      checkers[scale_idx].create(scales_border[scale_idx].size(), CV_8UC1);
+      norms[scale_idx].create((*scales_border)[scale_idx].size(), CV_8UC1);
+      checkers[scale_idx].create((*scales_border)[scale_idx].size(), CV_8UC1);
       //norm_avg_SIMD((*scales)[scale_idx], norms[scale_idx], marker_basesize);
-      localHistCont(scales_border[scale_idx], norms[scale_idx], marker_basesize);
+      localHistCont((*scales_border)[scale_idx], norms[scale_idx], marker_basesize);
       simpleChessCorner_SIMD(norms[scale_idx], checkers[scale_idx], chess_dist);
       
 #ifdef USE_SLOW_CORNERs
@@ -4088,7 +4093,7 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
       
       microbench_measure_output("norm and checker");
       
-      Marker::detect_scale(scales_border, norms, checkers, markers_raw, s, effort);
+      Marker::detect_scale((*scales_border), norms, checkers, markers_raw, s, effort);
       cout << " count " << markers_raw.size() << " scale " << s << endl; 
       
 #ifdef PAINT_CANDIDATE_CORNERS
@@ -4123,17 +4128,17 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
 	
 	if (effort < 0.25 && markers_raw.size() >= mincount)
 	  break;
-	found += checkneighbours3(scales_border, allmarkers, markers_raw, checked_3);
+	found += checkneighbours3((*scales_border), allmarkers, markers_raw, checked_3);
 	checked_3 = checked_new;
 	
 	if (effort < 0.25 && markers_raw.size() >= mincount)
 	  break;
-	found = checkneighbours2(scales_border, allmarkers, markers_raw, checked_2);
+	found = checkneighbours2((*scales_border), allmarkers, markers_raw, checked_2);
 	checked_2 = checked_new;
 	
 	if (effort < 0.25 && markers_raw.size() >= mincount)
 	  break;
-	found += checkneighbours(scales_border, allmarkers, markers_raw, checked_1);
+	found += checkneighbours((*scales_border), allmarkers, markers_raw, checked_1);
 	checked_1 = checked_new;
       }
       
@@ -4191,6 +4196,7 @@ void Marker::detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_s
   vector<Corner> blub;
   Mat paint, col;
   vector<Mat> scales;
+  vector<Mat> scales_border;
   vector<Marker> markers(0);
   int scale_min = 1;
   if (!marker_size_max)
@@ -4211,7 +4217,7 @@ void Marker::detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_s
   else
     use_rgb = false;
   
-  detect(img, markers, marker_size_max, marker_size_min, effort, mincount, &scales);
+  detect(img, markers, marker_size_max, marker_size_min, effort, mincount, &scales, &scales_border);
   
   for(uint i=0;i<markers.size();i++) {
     m = &markers[i];
@@ -4267,7 +4273,7 @@ void Marker::detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_s
             mc.estimated = false;*/
             //mc.p = mc.p*2.0;
             //mc.estimateDir(scales[s]);
-            //mc.refine_size(scales[1], 1.0, true , 0, mc.size, mc.size/2);
+            //mc.refine_size(scales_border[1], 1.0, true , 0, mc.size*(2.0/5.0), mc.size*(1.0/5.0));
             mc.refine_gradient(scales[1], 1.0);
 
             //printf("%02d %02d  ", (int)(mc.size+1), (int)((mc.size+2)*0.5));

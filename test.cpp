@@ -21,13 +21,14 @@ const bool use_rgb = false;
 const bool demosaic = false;
 
 const float subfit_oversampling = 2.0;
+const int subfit_max_size = 20;
 const float min_fit_contrast = 3.0;
 
 const float refine_rms_limit = 10000.0;
 
 const float rms_use_limit = 2.0;
 
-const double subfit_max_range = 0.3;
+const double subfit_max_range = 0.5;
 
 double max_accept_dist = 3.0;
 
@@ -119,7 +120,7 @@ bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<
   }
   
   inliers.resize(world_points_check.size());
-  Mat hom = findHomography(img_points_check[0], world_points_check, CV_RANSAC, 30, inliers);
+  Mat hom = findHomography(img_points_check[0], world_points_check, CV_RANSAC, 100, inliers);
   
   //vector<Point2f> proj;
   //perspectiveTransform(img_points_check[0], proj, hom);
@@ -165,10 +166,15 @@ void calibrate_channel(vector<vector<Point2f> > &img_points, vector<vector<Point
     cvtColor(img, paint, CV_GRAY2BGR);
   else
     paint = img.clone();
+  resize(paint, paint, Size(Point2i(paint.size())*4), INTER_LINEAR);
   for(int i=0;i<projected.size();i++) {
+    Point2f c = img_points[0][i]*4.0+Point2f(2,2);
     Point2f d = projected[i] - img_points[0][i];
-    line(paint, img_points[0][i], img_points[0][i]+10*d, Scalar(0,0,255));
+    line(paint, c-Point2f(2,0), c+Point2f(2,0), Scalar(0,255,0));
+    line(paint, c-Point2f(0,2), c+Point2f(0,2), Scalar(0,255,0));
+    line(paint, c, c+10*d, Scalar(0,0,255));
   }
+  
   imwrite("off_hdm.png", paint);
 }
 
@@ -1089,8 +1095,8 @@ double fit_gauss(Mat &img, double *params)
     }
   
   ceres::Solver::Options options;
-  options.max_num_iterations = 1000;
-  //options.linear_solver_type = ceres::DENSE_SCHUR;
+  options.max_num_iterations = 100;
+  options.linear_solver_type = ceres::DENSE_QR;
   //options.minimizer_progress_to_stdout = true;
 
   /*options.num_threads = 2;
@@ -1512,7 +1518,8 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
     if (maxlen < 5*4)
       continue;
     
-    size = maxlen*subfit_oversampling/5;
+    //FIXME need to use scale-space for perspective transform?
+    size = std::min<int>(maxlen*subfit_oversampling/5, subfit_max_size);
     
 #pragma omp parallel for
     for(int y=0;y<5;y++)
