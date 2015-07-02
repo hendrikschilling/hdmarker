@@ -628,6 +628,60 @@ struct GaussBorder2dError4 {
 };
 
 
+struct GaussBorder2dError5 {
+  GaussBorder2dError5(int val, int x, int y, double sw, double w, int size)
+      : val_(val), x_(x), y_(y), sw_(sw), w_(w), size_(size) {}
+
+/**
+ * used function: 
+ */
+  template <typename T>
+  bool operator()(const T* const p, const T* const b,
+                  T* residuals) const {
+    T x2 = T(x_) - p[0];
+    T y2 = T(y_) - p[1];
+    T sx2 = T(2.0)*p[3]*p[3];
+    T sy2 = T(2.0)*p[4]*p[4];
+    x2 = x2*x2;
+    y2 = y2*y2;
+    
+    //move extra border gauss distribution some way away from center
+    T d2 = T(size_)*1.0+b[0]*b[0];
+    T bx = d2*cos(b[1]);
+    T by = d2*sin(b[1]);
+    
+    bx += T(size_)*0.5;
+    by += T(size_)*0.5;
+    
+    bx = T(x_) - bx;
+    by = T(y_) - by;
+    bx = bx*bx;
+    by = by*by;
+    
+    //spread at least equal to avg of point spread x,y
+    T bs2 = (p[3]+p[4])*T(0.5)+b[2];
+    bs2 = bs2*bs2;
+    
+    T border = exp(-(bx/bs2+by/bs2));
+    
+    T d = T(sw_)+T(1.0);
+    residuals[0] = (T(val_) - (p[5] + (b[3]-p[5])*border + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*d;
+    
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(int val, int x, int y, double sw, double w, int size) {
+    return (new ceres::AutoDiffCostFunction<GaussBorder2dError5, 1, 6, 4>(
+                new GaussBorder2dError5(val, x, y, sw, w, size)));
+  }
+
+  int x_, y_, val_, size_;
+  double w_, sw_;
+};
+
+
 struct Border2dError {
   Border2dError(int val, int x, int y, double sw, int size, double border[4])
       : val_(val), x_(x), y_(y), sw_(sw), size_(size) {
@@ -1014,10 +1068,40 @@ double fit_gauss(Mat &img, double *params)
   
   Point2f v(params[0]-size*0.5, params[1]-size*0.5);
   
-  if (false) {
-  //if (summary.termination_type != ceres::CONVERGENCE || norm(v)/subfit_oversampling > max_accept_dist) {
+  //if (false) {
+  if (summary.termination_type != ceres::CONVERGENCE || norm(v)/subfit_oversampling > max_accept_dist) {
+    for(int i=0;i<6;i++)
+      params[i] = params_cpy[i];
+    
+    double border[5];
+    //angle
+    border[0] = 0.0;
+    //distance
+    border[1] = 0.0;
+    //soread
+    border[2] = size*0.5;
+    border[3] = params[2] + params[5];
+    
+    params[2] = params[2] + params[5];
+    
+    ceres::Problem problem_gauss_border5;
+    for(y=0;y<size-0;y++)
+      for(x=0;x<size-0;x++) {
+        double x2 = x-size*0.5;
+        double y2 = y-size*0.5;
+        x2 = x2*x2;
+        y2 = y2*y2;
+        double s2 = size*0.5;
+        s2=s2*s2;
+        double s = exp(-x2/s2-y2/s2);
+        ceres::CostFunction* cost_function = GaussBorder2dError5::Create(ptr[y*size+x], x, y, s, size*size, size);
+        problem_gauss_border5.AddResidualBlock(cost_function, NULL, params, border);
+      }
+      
+    ceres::Solve(options, &problem_gauss_border5, &summary);
+    
     //printf("%f %f -> ", params[0], params[1]);
-    ceres::Solver::Summary summary2;
+    /*ceres::Solver::Summary summary2;
     
     for(int i=0;i<6;i++)
       params[i] = params_cpy[i];
@@ -1050,7 +1134,7 @@ double fit_gauss(Mat &img, double *params)
     x=0;
     for(y=b3;y<size-b3;y++)
       sum += ptr[y*size+x];
-    border[3] = sum/size_b;
+    border[3] = sum/size_b;*/
     
     /*if (params[2] > 0)
       for(int i=0;i<4;i++)
@@ -1059,8 +1143,8 @@ double fit_gauss(Mat &img, double *params)
       for(int i=0;i<4;i++)
         border[i] = min(border[i], params[5]);*/
       
-    double params_common;
-    double params_border;
+    //double params_common;
+    //double params_border;
       
     /*ceres::Problem problem_border;
     for(y=0;y<size-0;y++)
@@ -1088,7 +1172,7 @@ double fit_gauss(Mat &img, double *params)
     imwrite(buf, paint);*/
     
     //spread
-    params[3] = size*0.1;
+   /* params[3] = size*0.1;
     params[4] = size*0.1;
     //printf("start amplitude %f\n", params[2]);
     
@@ -1105,7 +1189,7 @@ double fit_gauss(Mat &img, double *params)
         ceres::CostFunction* cost_function = GaussBorder2dError::Create(ptr[y*size+x], x, y, s, size*size*0.25, size-1, border);
         problem_gauss_border.AddResidualBlock(cost_function, NULL, params);
       }
-    ceres::Solve(options, &problem_gauss_border, &summary2);
+    ceres::Solve(options, &problem_gauss_border, &summary2);*/
     //std::cout << summary2.FullReport() << "\n";
     
     /*draw_gauss_border(paint, params, border);
@@ -1113,7 +1197,7 @@ double fit_gauss(Mat &img, double *params)
     imwrite(buf, paint);*/
     
     //spread
-    params[3] = size*0.1;
+    /*params[3] = size*0.1;
     params[4] = size*0.1;
     params[6] = params[3];
     params[7] = params[4];
@@ -1132,22 +1216,22 @@ double fit_gauss(Mat &img, double *params)
         problem_gauss_border2.AddResidualBlock(cost_function, NULL, params);
       }
     ceres::Solve(options, &problem_gauss_border2, &summary2);
-    //std::cout << summary2.FullReport() << "\n";
+    //std::cout << summary2.FullReport() << "\n";*/
     
     //printf("%f %f %f (%d) b:%f a:%f\n", params[3], params[4], params[6],params[7],debug_counter, params[5], params[2]);
-    summary = summary2;
+    //summary = summary2;
     
     /*draw_gauss_border2(paint, params, border);
     sprintf(buf, "point%07d_fitg2.png", debug_counter);
     imwrite(buf, paint);*/
     
     //fit border color!
-    double border_col[8];
+    /*double border_col[8];
     for(int i=0;i<4;i++)
       border_col[i] = border[i];
     
     //make amplitude absolute
-    params[2] = params[2]+params[5];
+    params[2] = params[2]+params[5];*/
     
     //reset spread
     /*params[3] = size*0.1;
@@ -1177,7 +1261,7 @@ double fit_gauss(Mat &img, double *params)
     imwrite(buf, paint);*/
     
     //reset spread
-    params[3] = size*0.1;
+    /*params[3] = size*0.1;
     params[4] = size*0.1;
     params[6] = params[3];
     params[7] = params[4];
@@ -1200,7 +1284,7 @@ double fit_gauss(Mat &img, double *params)
         problem_gauss_border4.AddResidualBlock(cost_function, NULL, params, border_col, border_pos);
       }
       
-    ceres::Solve(options, &problem_gauss_border4, &summary2);
+    ceres::Solve(options, &problem_gauss_border4, &summary2);*/
     //std::cout << summary2.FullReport() << "\n";
     
     //printf("%f %f %f %f\n", border_pos[0], border_pos[1], border_pos[2], border_pos[3]);
@@ -1209,9 +1293,9 @@ double fit_gauss(Mat &img, double *params)
     sprintf(buf, "point%07d_fitg4.png", debug_counter);
     imwrite(buf, paint);*/
     
-    summary = summary2;
+    //summary = summary2;
     
-    debug_counter++;
+    //debug_counter++;
   }
   
   //std::cout << summary.FullReport() << "\n";
