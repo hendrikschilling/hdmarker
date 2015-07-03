@@ -29,7 +29,7 @@ const float min_fitted_contrast = 10.0; //minimum amplitude of fitted gaussian
 
 const float rms_use_limit = 5.0;
 
-const int int_search_range = 5;
+const int int_search_range = 11;
 
 const double subfit_max_range = 0.1;
 
