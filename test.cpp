@@ -9,6 +9,7 @@
 #include "ceres/ceres.h"
 
 #include <iostream>
+#include <unordered_map>
 
 using namespace std;
 using namespace cv;
@@ -463,10 +464,34 @@ double fit_gauss(Mat &img, double *params)
   return sqrt(summary.final_cost/problem_gauss.NumResiduals());
 }
 
+class Interpolated_Corner {
+public:
+  Point2i id;
+  Point3f p;
+  bool used_as_start_corner = false;
+  
+  Interpolated_Corner() {};
+  Interpolated_Corner(Point2i id_, Point2f p_, bool used)
+    : id(id_), p(p_), used_as_start_corner(used) {};
+};
+
+uint64_t id_to_key(Point2i id)
+{
+  uint64_t key = id.x;
+  key = key << 32;
+  key = key | id.y;
+  
+  return key;
+}
+
+typedef unordered_map<uint64_t, Interpolated_Corner> IntCMap;
+
 void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, Mat &paint, int in_idx_step, float in_c_offset, float rms_use_limit, int out_idx_scale, int out_idx_offset)
 {  
   int counter = 0;
   sort(corners.begin(), corners.end(), corner_cmp);
+  
+  IntCMap corners_interpolated;
   
 #pragma omp parallel for schedule(dynamic)
   for(int i=0;i<corners.size();i++) {
@@ -485,6 +510,13 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
           //exists in corners
           if (!corner_find_off_save(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0]))
             continue;
+          
+          IntCMap::iterator it;
+          Point2i id(c.id.x+sx*in_idx_step, c.id.y+sy*in_idx_step);
+          it = corners_interpolated.find(id_to_key(id));
+          if (it != corners_interpolated.end() && (*it).second.used_as_start_corner)
+            continue;
+          
           //interpolate from corners
           if (corner_find_off_save_int(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0], int_search_range))
             continue;
@@ -492,6 +524,9 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
           //set c to our interpolated corner id
           c.id.x += sx*in_idx_step;
           c.id.y += sy*in_idx_step;
+          
+          Interpolated_Corner c_i(c.id, c.p, true);
+          corners_interpolated[id_to_key(c.id)] = c_i;
         }
         if (corner_find_off_save_int(corners, c, in_idx_step, 0, ipoints[1], int_search_range)) continue;
         if (corner_find_off_save_int(corners, c, in_idx_step, in_idx_step, ipoints[2], int_search_range)) continue;
