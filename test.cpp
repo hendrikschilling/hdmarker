@@ -23,12 +23,14 @@ const bool demosaic = false;
 const float subfit_oversampling = 2.0;
 const int subfit_max_size = 30;
 const int subfit_min_size = 14;
-const float min_fit_contrast = 5.0;
+const float min_fit_contrast = 2.0;
 const float min_fitted_contrast = 10.0; //minimum amplitude of fitted gaussian
 
 const float rms_use_limit = 5.0;
 
-const double subfit_max_range = 1.0;
+const int int_search_range = 5;
+
+const double subfit_max_range = 0.1;
 
 double max_accept_dist = 3.0;
 
@@ -286,21 +288,62 @@ bool corner_find_off_save(vector<Corner> &corners, Corner ref, int x, int y, Poi
   std::vector<Corner>::iterator found;
   ref.id.x += x;
   ref.id.y += y;
-  //FIXME doesn't work ?!
-  /*bounds=equal_range(corners.begin(), corners.end(), ref, corner_cmp);
-  if (bounds.first != bounds.second)
-    return true;*/
-  /*bool found = false;
-  for(int i=0;i<corners.size();i++)
-    if (corners[i].id == ref.id) {
-      found = true;
-      out = corners[i].p;
-      break;
-    }*/
   found = lower_bound(corners.begin(), corners.end(), ref, corner_cmp);
   if (found->id != ref.id)
     return true;
   out = found->p;
+  return false;
+}
+
+
+bool corner_find_off_save_int(vector<Corner> &corners, Corner ref, int x, int y, Point2f &out, int range)
+{
+  Corner search = ref;
+  std::vector<Corner>::iterator found;
+  search.id.x += x;
+  search.id.y += y;
+  found = lower_bound(corners.begin(), corners.end(), search, corner_cmp);
+  if (found->id == search.id) {
+    out = found->p;
+    return false;
+  }
+  
+  int r_l, r_h, r_diff = 1000000000;
+  Point2f l, h;
+  
+  for(int r=1;r<=range;r++)
+    if (!corner_find_off_save(corners, ref, x*(1+r), y, h)) {
+      r_h = r;
+      for(int r=1;r<=range;r++)
+        if (!corner_find_off_save(corners, ref, x*(1-r), y, l)) {
+          r_l = r;
+          r_diff = r_h+r_l;
+          goto found1;
+        }
+    }
+  return true;
+  
+  found1 :
+  out = l + (h-l)*(1.0/(r_h+r_l))*r_l;
+  
+  for(int r=1;r<=range;r++)
+    if (!corner_find_off_save(corners, ref, x, y*(1+r), h)) {
+      r_h = r;
+      for(int r=1;r<=range;r++)
+        if (!corner_find_off_save(corners, ref, x, y*(1-r), l)) {
+          r_l = r;
+          if (r_h+r_l > r_diff)
+            return false;
+          else
+            goto found2;
+        }
+    }
+  if (r_diff != 1000000000)
+    return false;
+    
+  found2 :
+  out = l + (h-l)*(1.0/(r_h+r_l))*r_l;
+  
   return false;
 }
 
@@ -314,8 +357,8 @@ struct Gauss2dError {
   template <typename T>
   bool operator()(const T* const p,
                   T* residuals) const {
-    T x2 = T(x_) - (T(m_)+sin(p[0])/T(m_*2.0*subfit_max_range));
-    T y2 = T(y_) - (T(m_)+sin(p[1])/T(m_*2.0*subfit_max_range));
+    T x2 = T(x_) - (T(m_)+sin(p[0])*T(m_*2.0*subfit_max_range));
+    T y2 = T(y_) - (T(m_)+sin(p[1])*T(m_*2.0*subfit_max_range));
     T sx2 = T(2.0)*p[3]*p[3];
     T sy2 = T(2.0)*p[4]*p[4];
     x2 = x2*x2;
@@ -409,8 +452,8 @@ double fit_gauss(Mat &img, double *params)
   ceres::Solver::Summary summary;
   ceres::Solve(options, &problem_gauss, &summary);
   
-  params[0] = size*0.5+sin(params[0])/(size*subfit_max_range);
-  params[1] = size*0.5+sin(params[1])/(size*subfit_max_range);
+  params[0] = size*0.5+sin(params[0])*(size*subfit_max_range);
+  params[1] = size*0.5+sin(params[1])*(size*subfit_max_range);
   
   if (abs(params[2]-params[5]) <= min_fitted_contrast)
     return FLT_MAX;
@@ -429,63 +472,80 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
   for(int i=0;i<corners.size();i++) {
 #pragma omp critical
     printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
-    vector<Point2f> ipoints(4);
-    Corner c = corners[i];
-    int size;
-    
-    ipoints[0] = corners[i].p;
-    if (corner_find_off_save(corners, c, in_idx_step, 0, ipoints[1])) continue;
-    if (corner_find_off_save(corners, c, in_idx_step, in_idx_step, ipoints[2])) continue;
-    if (corner_find_off_save(corners, c, 0, in_idx_step, ipoints[3])) continue;
-    
-    float maxlen = 0;
-    for(int i=0;i<4;i++) {
-      Point2f v = ipoints[i]-ipoints[(i+1)%4];
-      float len = v.x*v.x+v.y*v.y;
-      if (len > maxlen)
-        maxlen = len;
-      v = ipoints[(i+3)%4]-ipoints[i];
-      len = v.x*v.x+v.y*v.y;
-      if (len > maxlen)
-        maxlen = len;
-    }
-    maxlen = sqrt(maxlen);
-    //printf("longest side %f\n", maxlen);
-    
-    if (maxlen < 5*4)
-      continue;
-    
-    //FIXME need to use scale-space for perspective transform?
-    size = std::max<int>(std::min<int>(maxlen*subfit_oversampling/5, subfit_max_size), subfit_min_size);
-    
-    for(int y=0;y<5;y++)
-      for(int x=0;x<5;x++) {
-        vector<Point2f> cpoints(4);
-        cpoints[0] = Point2f((in_c_offset-x)*size,(in_c_offset-y)*size);
-        cpoints[1] = Point2f((5+in_c_offset-x)*size,(in_c_offset-y)*size);
-        cpoints[2] = Point2f((5+in_c_offset-x)*size,(5+in_c_offset-y)*size);
-        cpoints[3] = Point2f((in_c_offset-x)*size,(5+in_c_offset-y)*size);
+    for(int sy=-int_search_range;sy<=int_search_range;sy++)
+      for(int sx=-int_search_range;sx<=int_search_range;sx++) {
+        vector<Point2f> ipoints(4);
+        Corner c = corners[i];
+        int size;
         
-        Mat proj = Mat(size, size, CV_8U);
-        Mat pers = getPerspectiveTransform(ipoints, cpoints);
-        Mat pers_i = getPerspectiveTransform(cpoints, ipoints);
-        warpPerspective(img, proj, pers, Size(size, size), INTER_LINEAR);
+        if (!sy && !sx)
+          ipoints[0] = corners[i].p;
+        else {
+          Corner newc;
+          //exists in corners
+          if (!corner_find_off_save(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0]))
+            continue;
+          //interpolate from corners
+          if (corner_find_off_save_int(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0], int_search_range))
+            continue;
+          
+          //set c to our interpolated corner id
+          c.id.x += sx*in_idx_step;
+          c.id.y += sy*in_idx_step;
+        }
+        if (corner_find_off_save_int(corners, c, in_idx_step, 0, ipoints[1], int_search_range)) continue;
+        if (corner_find_off_save_int(corners, c, in_idx_step, in_idx_step, ipoints[2], int_search_range)) continue;
+        if (corner_find_off_save_int(corners, c, 0, in_idx_step, ipoints[3], int_search_range)) continue;
         
-        double params[6];
-        double rms = fit_gauss(proj, params);
-        if (rms >= rms_use_limit)
+        float maxlen = 0;
+        for(int i=0;i<4;i++) {
+          Point2f v = ipoints[i]-ipoints[(i+1)%4];
+          float len = v.x*v.x+v.y*v.y;
+          if (len > maxlen)
+            maxlen = len;
+          v = ipoints[(i+3)%4]-ipoints[i];
+          len = v.x*v.x+v.y*v.y;
+          if (len > maxlen)
+            maxlen = len;
+        }
+        maxlen = sqrt(maxlen);
+        //printf("longest side %f\n", maxlen);
+        
+        if (maxlen < 5*4)
           continue;
         
-        vector<Point2f> coords(1);
-        coords[0] = Point2f(params[0], params[1]);
-        vector<Point2f> res(1);
-        perspectiveTransform(coords, res, pers_i);
+        //FIXME need to use scale-space for perspective transform?
+        size = std::max<int>(std::min<int>(maxlen*subfit_oversampling/5, subfit_max_size), subfit_min_size);
         
-        Corner c_o(res[0], Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), 0);
-#pragma omp critical
-        corners_out.push_back(c_o);
-      }
+        for(int y=0;y<5;y++)
+          for(int x=0;x<5;x++) {
+            vector<Point2f> cpoints(4);
+            cpoints[0] = Point2f((in_c_offset-x)*size,(in_c_offset-y)*size);
+            cpoints[1] = Point2f((5+in_c_offset-x)*size,(in_c_offset-y)*size);
+            cpoints[2] = Point2f((5+in_c_offset-x)*size,(5+in_c_offset-y)*size);
+            cpoints[3] = Point2f((in_c_offset-x)*size,(5+in_c_offset-y)*size);
+            
+            Mat proj = Mat(size, size, CV_8U);
+            Mat pers = getPerspectiveTransform(ipoints, cpoints);
+            Mat pers_i = getPerspectiveTransform(cpoints, ipoints);
+            warpPerspective(img, proj, pers, Size(size, size), INTER_LINEAR);
+            
+            double params[6];
+            double rms = fit_gauss(proj, params);
+            if (rms >= rms_use_limit)
+              continue;
+            
+            vector<Point2f> coords(1);
+            coords[0] = Point2f(params[0], params[1]);
+            vector<Point2f> res(1);
+            perspectiveTransform(coords, res, pers_i);
+            
+            Corner c_o(res[0], Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), 0);
+    #pragma omp critical
+            corners_out.push_back(c_o);
+          }
 
+      }
   }
   printf("\n");
 }
