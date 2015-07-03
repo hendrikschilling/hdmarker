@@ -23,11 +23,12 @@ const bool demosaic = false;
 const float subfit_oversampling = 2.0;
 const int subfit_max_size = 30;
 const int subfit_min_size = 14;
-const float min_fit_contrast = 3.0;
+const float min_fit_contrast = 5.0;
+const float min_fitted_contrast = 10.0; //minimum amplitude of fitted gaussian
 
-const float rms_use_limit = 2.0;
+const float rms_use_limit = 5.0;
 
-const double subfit_max_range = 0.5;
+const double subfit_max_range = 1.0;
 
 double max_accept_dist = 3.0;
 
@@ -165,16 +166,22 @@ void calibrate_channel(vector<vector<Point2f> > &img_points, vector<vector<Point
     cvtColor(img, paint, CV_GRAY2BGR);
   else
     paint = img.clone();
-  resize(paint, paint, Size(Point2i(paint.size())*4), INTER_LINEAR);
+  //resize(paint, paint, Size(Point2i(paint.size())*4), INTER_LINEAR);
   for(int i=0;i<projected.size();i++) {
-    Point2f c = img_points[0][i]*4.0+Point2f(2,2);
+    /*Point2f c = img_points[0][i]*4.0+Point2f(2,2);
+    Point2f d = projected[i] - img_points[0][i];
+    line(paint, c-Point2f(2,0), c+Point2f(2,0), Scalar(0,255,0));
+    line(paint, c-Point2f(0,2), c+Point2f(0,2), Scalar(0,255,0));
+    line(paint, c, c+10*d, Scalar(0,0,255));*/
+    
+    Point2f c = img_points[0][i];
     Point2f d = projected[i] - img_points[0][i];
     line(paint, c-Point2f(2,0), c+Point2f(2,0), Scalar(0,255,0));
     line(paint, c-Point2f(0,2), c+Point2f(0,2), Scalar(0,255,0));
     line(paint, c, c+10*d, Scalar(0,0,255));
   }
   
-  imwrite("off_hdm.png", paint);
+  imwrite("off_hdm.jpg", paint);
 }
 
 void check_calibration(vector<Corner> &corners, int w, int h, Mat &img, vector<Corner> &corners_filtered)
@@ -307,17 +314,13 @@ struct Gauss2dError {
   template <typename T>
   bool operator()(const T* const p,
                   T* residuals) const {
-    T x2 = T(x_) - (T(m_)+sin(p[0])/T(subfit_oversampling)*T(subfit_max_range));
-    T y2 = T(y_) - (T(m_)+sin(p[1])/T(subfit_oversampling)*T(subfit_max_range));
+    T x2 = T(x_) - (T(m_)+sin(p[0])/T(m_*2.0*subfit_max_range));
+    T y2 = T(y_) - (T(m_)+sin(p[1])/T(m_*2.0*subfit_max_range));
     T sx2 = T(2.0)*p[3]*p[3];
     T sy2 = T(2.0)*p[4]*p[4];
     x2 = x2*x2;
     y2 = y2*y2;
-    
-    //want to us sqrt(x2+y2)+T(1.0) but leads to invalid jakobian?
-    //T d = sqrt(x2+y2+T(0.0001)) + T(w_);
-    //T d = exp(-(x2/T(w_)+y2/T(w_)))+T(sw_);
-    //non-weighted leads to better overall estimates?
+
     residuals[0] = (T(val_) - (p[5] + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*T(sw_);
     
     return true;
@@ -392,10 +395,10 @@ double fit_gauss(Mat &img, double *params)
       double y2 = y-size*0.5;
       x2 = x2*x2;
       y2 = y2*y2;
-      double s2 = size*0.25;
+      double s2 = size*0.5;
       s2=s2*s2;
-      double s = exp(-x2/s2-y2/s2);
-      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, size*0.5, s, size*size*0.25);
+      double sw = exp(-x2/s2-y2/s2);
+      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, size*0.5, sw, size*size*0.25);
       problem_gauss.AddResidualBlock(cost_function, NULL, params);
     }
   
@@ -406,15 +409,15 @@ double fit_gauss(Mat &img, double *params)
   ceres::Solver::Summary summary;
   ceres::Solve(options, &problem_gauss, &summary);
   
-  params[0] = size*0.5+sin(params[0])/subfit_oversampling*subfit_max_range;
-  params[1] = size*0.5+sin(params[1])/subfit_oversampling*subfit_max_range;
+  params[0] = size*0.5+sin(params[0])/(size*subfit_max_range);
+  params[1] = size*0.5+sin(params[1])/(size*subfit_max_range);
   
-  Point2f v(params[0]-size*0.5, params[1]-size*0.5);
-  
-  if (summary.termination_type == ceres::CONVERGENCE)
-    return sqrt(summary.final_cost/problem_gauss.NumResiduals());
-  else
+  if (abs(params[2]-params[5]) <= min_fitted_contrast)
     return FLT_MAX;
+  if (summary.termination_type != ceres::CONVERGENCE)
+    return FLT_MAX;
+  
+  return sqrt(summary.final_cost/problem_gauss.NumResiduals());
 }
 
 void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, Mat &paint, int in_idx_step, float in_c_offset, float rms_use_limit, int out_idx_scale, int out_idx_offset)
@@ -570,6 +573,12 @@ int main(int argc, char* argv[])
   
   vector<Corner> corners_f3;
   check_calibration(corners_sub2, img.size().width, img.size().height, img, corners_f3);
+  
+  vector<Corner> corners_sub3; 
+  detect_sub_corners(gray , corners_f3, corners_sub3, paint, 2, 0.5, rms_use_limit, 5, 0);
+  
+  vector<Corner> corners_f4;
+  check_calibration(corners_sub3, img.size().width, img.size().height, img, corners_f4);
   
   imwrite(argv[2], paint);
   

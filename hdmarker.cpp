@@ -1129,11 +1129,10 @@ void Marker_Corner::cornerSubPixCPMask( InputArray _image, Point2f &p,
     
     void Marker_Corner::refine_gradient(Mat &img, float scale)
     {
+      printf("refine from scale %f\n", scale);
       //cornerSubPixCP(img, p, Size(size/6,size/6), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
-      int s = size/4;
-      if (s > 10)
-        s = 10;
-      cornerSubPixCPMask(img, p, Size(s,s), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
+      //int s = size/4;
+      //cornerSubPixCPMask(img, p, Size(s,s), Size(-1, -1), TermCriteria(TermCriteria::COUNT | TermCriteria::EPS, 100, 0.001));
     }
     
     
@@ -1156,9 +1155,18 @@ void Marker_Corner::cornerSubPixCPMask( InputArray _image, Point2f &p,
       dir[1].x = size*cos(dir_rad[1]);
       dir[1].y = size*sin(dir_rad[1]);
       
-      if (p.x <= size || p.y <= size || p.x >= img.size().width - size || p.y >= img.size().height-size) {
-        printf("error: too close to border, could not refine\n");
-        return;
+      if (p.x+border <= size || p.y+border <= size || p.x >= img.size().width+border-size || p.y >= img.size().height+border-size) {
+        int new_size = std::min<int>(p.x+border-1, size);
+        new_size = std::min<int>(p.y+border-1, new_size);
+        new_size = std::min<int>(img.size().width+border-p.x-1, new_size);
+        new_size = std::min<int>(img.size().height+border-p.y-1, new_size);
+        if (new_size <= 10 || new_size <= 0.25*size) {
+          printf("error: too close to border to refine!\n");
+          return;
+        }
+        printf("debug: too close to border, decreasing size from %d to %d\n", size, new_size);
+        dead = max(dead - (size-new_size), 0);
+        size = new_size;
       }
         
       score = scoreCorner(img, p, dir, cso*size, cso*dead);
@@ -1706,6 +1714,7 @@ double pattern_score(Mat patt)
         mindist += sqrt(v.x*v.x+v.y*v.y);
         c[i].dir_rad[0] = atan2(v.y, v.x);
         c[i].size = mindist*0.5;
+        c[i].scale = log2(scale)+1;
       }
       
       
@@ -4252,29 +4261,32 @@ void Marker::detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_s
       for(int i=0;i<(*allcorners[j]).size();i++)
 	if ((*allcorners[j])[i].page != -1 && (*allcorners[j])[i].score > corner_good) {
 	  mc = (*allcorners[j])[i];
-          //printf("refine %.2fx%.2f->", mc.p.x, mc.p.y);
+          //cannot refine if too close to border :-(
+          if (mc.p.x-mc.size <= 0 || mc.p.x+mc.size >= img.size().width || mc.p.y-mc.size <= 0 || mc.p.y+mc.size >= img.size().height)
+            continue;
 	  //FIXME more accurate refinement+larger region than global options?
 	 //mc.estimated = false;
 	  //FIXME check/verify accuracy!
 	 //if (mc.scale >= 2)
           //FIXME what if mc.scale == 0!
-	  /*for(int s=log2(mc.scale)+1,sd=mc.scale;s>=1;s--,sd/=2) {
-              mc.refined = false;
-              mc.scale = s;
-              mc.estimated = false;
-	      mc.p = mc.p*(1.0/sd);
-	      //mc.estimateDir(scales[s]);
-	      mc.refine(scales[s], true);
-              mc.refine_size(scales[s], 1.0, true , 0, (mc.size)/sd, (mc.size)/sd/2);
-	      mc.p = mc.p*sd;
-	    }
+          if (mc.scale >= 2)
+            for(int s=mc.scale,sd=1u<<(mc.scale-1);s>=1;s--,sd/=2) {
+                mc.refined = false;
+                mc.scale = s;
+                mc.estimated = true;
+                mc.p = mc.p*(1.0/sd);
+                //mc.estimateDir(scales[s]);
+                //mc.refine(scales[s], true);
+                mc.refine_size(scales_border[s], 1.0, true , 0, (mc.size/3)/sd, (mc.size)/sd/6);
+                mc.p = mc.p*sd;
+              }
             mc.refined = false;
             mc.scale = 0;
-            mc.estimated = false;*/
+            mc.estimated = false;
             //mc.p = mc.p*2.0;
             //mc.estimateDir(scales[s]);
-            //mc.refine_size(scales_border[1], 1.0, true , 0, mc.size*(2.0/5.0), mc.size*(1.0/5.0));
-            mc.refine_gradient(scales[1], 1.0);
+            mc.refine_size(scales_border[1], 1.0, true , 0, mc.size/3, mc.size/6);
+            //mc.refine_gradient(scales[1], 1.0);
 
             //printf("%02d %02d  ", (int)(mc.size+1), (int)((mc.size+2)*0.5));
             //mc.refine(scales[0], true);

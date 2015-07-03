@@ -15,7 +15,7 @@
 using namespace cv;
 using namespace std;
 
-const int recursive_markers = 2;
+const int recursive_markers = 3;
 const int subsampling = 1;
 const int ss_border = 2;
 
