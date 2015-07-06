@@ -31,7 +31,7 @@ const float rms_use_limit = 5.0;
 
 const int int_search_range = 11;
 
-const double subfit_max_range = 0.1;
+const double subfit_max_range = 0.2;
 
 double max_accept_dist = 3.0;
 
@@ -495,7 +495,7 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
   
 #pragma omp parallel for schedule(dynamic)
   for(int i=0;i<corners.size();i++) {
-#pragma omp critical
+#pragma omp critical (_print_)
     printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
     for(int sy=-int_search_range;sy<=int_search_range;sy++)
       for(int sx=-int_search_range;sx<=int_search_range;sx++) {
@@ -511,22 +511,31 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
           if (!corner_find_off_save(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0]))
             continue;
           
-          IntCMap::iterator it;
-          Point2i id(c.id.x+sx*in_idx_step, c.id.y+sy*in_idx_step);
-          it = corners_interpolated.find(id_to_key(id));
-          if (it != corners_interpolated.end() && (*it).second.used_as_start_corner)
+          bool do_continue = false;
+#pragma omp critical (_map_)
+          {
+            IntCMap::iterator it;
+            Point2i id(c.id.x+sx*in_idx_step, c.id.y+sy*in_idx_step);
+            it = corners_interpolated.find(id_to_key(id));
+            if (it != corners_interpolated.end() && (*it).second.used_as_start_corner)
+              do_continue = true;
+            
+            if (!do_continue)
+              //interpolate from corners
+              if (corner_find_off_save_int(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0], int_search_range))
+                do_continue = true;
+            
+            if (!do_continue) {
+              //set c to our interpolated corner id
+              c.id.x += sx*in_idx_step;
+              c.id.y += sy*in_idx_step;
+              
+              Interpolated_Corner c_i(c.id, c.p, true);
+              corners_interpolated[id_to_key(c.id)] = c_i;
+            }
+          }
+          if (do_continue)
             continue;
-          
-          //interpolate from corners
-          if (corner_find_off_save_int(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0], int_search_range))
-            continue;
-          
-          //set c to our interpolated corner id
-          c.id.x += sx*in_idx_step;
-          c.id.y += sy*in_idx_step;
-          
-          Interpolated_Corner c_i(c.id, c.p, true);
-          corners_interpolated[id_to_key(c.id)] = c_i;
         }
         if (corner_find_off_save_int(corners, c, in_idx_step, 0, ipoints[1], int_search_range)) continue;
         if (corner_find_off_save_int(corners, c, in_idx_step, in_idx_step, ipoints[2], int_search_range)) continue;
