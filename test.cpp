@@ -19,7 +19,7 @@ const int grid_height = 14;
 
 const bool use_rgb = false;
 
-const bool demosaic = false;
+const bool demosaic = true;
 
 const float subfit_oversampling = 2.0;
 const int subfit_max_size = 30;
@@ -726,7 +726,7 @@ void corrupt(Mat &img)
   randn(noise, 0, 3.0);
   img += noise;
   img.convertTo(img, CV_8U);
-  cvtColor(img, img, COLOR_BayerRG2BGR_VNG);
+  cvtColor(img, img, COLOR_BayerBG2BGR_VNG);
   cvtColor(img, img, CV_BGR2GRAY);
 }
 
@@ -745,13 +745,12 @@ int main(int argc, char* argv[])
   
   if (demosaic) {
     img = cv::imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
-    paint = cv::imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
-    cvtColor(img, img, COLOR_BayerRG2BGR);
-    cvtColor(paint, paint, COLOR_BayerRG2BGR);
+    cvtColor(img, img, COLOR_BayerBG2BGR);
+    paint = img.clone();
   }
   else {
     img = cv::imread(argv[1]);
-    paint = cv::imread(argv[1]);
+    paint = img.clone();
   }  
   
   //corrupt(img);
