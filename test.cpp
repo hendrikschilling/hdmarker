@@ -284,6 +284,9 @@ int main(int argc, char* argv[])
   vector<Corner> corners_sub; 
   hdmarker_detect_subpattern(gray, corners_f, corners_sub, 3);
   
+  vector<Corner> corners_f2;
+  check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f2);
+  
   imwrite(argv[2], paint);
   
 
