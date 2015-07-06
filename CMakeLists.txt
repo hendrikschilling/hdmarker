@@ -8,7 +8,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(CMAKE_SHARED_LINKER_FLAGS "-O3 -g -mssse3 -Wall")
     add_definitions(-DCOMPILER_CLANG_X86)
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    set(CMAKE_CXX_FLAGS "-Wall -g -O3 -std=c++11 -Wall")
+    set(CMAKE_CXX_FLAGS "-Wall -g -O3 -std=c++11 -Wall -flto")
     add_definitions(-DCOMPILER_GCC_X86)
     add_definitions(-DCOMPILER_GCC)
 endif()
@@ -33,20 +33,23 @@ include_directories("/usr/include/valgrind/")
 
 add_library(hdmarker SHARED hdmarker.cpp gridstore.cpp timebench.cpp)
 
+add_library(subpattern subpattern.cpp)
+
 target_link_libraries(hdmarker ${OpenCV_LIBS})
+target_link_libraries(subpattern ${OpenCV_LIBS} ${CERES_LIBRARIES})
 
 add_executable(hdmarker_generate marker_gen.cpp)
 add_executable(hdmarker_test test.cpp)
 #add_executable(hdmarker_scaletest testscales.cpp)
 target_link_libraries(hdmarker_generate ${OpenCV_LIBS} hdmarker)
 set(CMAKE_CXX_FLAGS "-Wall -g -O3 -std=c++11 -Wall -fopenmp")
-target_link_libraries(hdmarker_test ${OpenCV_LIBS} ${CERES_LIBRARIES} hdmarker)
+target_link_libraries(hdmarker_test hdmarker subpattern)
 #target_link_libraries(hdmarker_scaletest ${OpenCV_LIBS} hdmarker)
 
 configure_file(hdmarker.pc.in hdmarker.pc @ONLY)
 
 install(FILES hdmarker.pc DESTINATION lib/pkgconfig)
-install(FILES hdmarker.hpp gridstore.hpp DESTINATION include/hdmarker)
+install(FILES hdmarker.hpp subpattern.hpp gridstore.hpp DESTINATION include/hdmarker)
 install(TARGETS hdmarker_test hdmarker_generate hdmarker
             RUNTIME DESTINATION bin
             LIBRARY DESTINATION lib
