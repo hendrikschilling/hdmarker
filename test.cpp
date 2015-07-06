@@ -24,10 +24,10 @@ const bool demosaic = false;
 const float subfit_oversampling = 2.0;
 const int subfit_max_size = 30;
 const int subfit_min_size = 14;
-const float min_fit_contrast = 2.0;
-const float min_fitted_contrast = 10.0; //minimum amplitude of fitted gaussian
+const float min_fit_contrast = 3.0;
+const float min_fitted_contrast = 5.0; //minimum amplitude of fitted gaussian
 
-const float rms_use_limit = 5.0;
+const float rms_use_limit = 3200.0;
 
 const float recurse_min_len = 5.0;
 
@@ -535,23 +535,23 @@ double fit_gauss(Mat &img, double *params)
   params[0] = size*0.5+sin(params[0])*(size*subfit_max_range);
   params[1] = size*0.5+sin(params[1])*(size*subfit_max_range);
   
-  if (abs(params[2]-params[5]) <= min_fitted_contrast)
-    return FLT_MAX;
+  //if (abs(params[2]-params[5]) <= min_fitted_contrast)
+    //return FLT_MAX;
   if (summary.termination_type != ceres::CONVERGENCE)
     return FLT_MAX;
   if (params[5] <= 0 || params[5] >= 255)
     return FLT_MAX;
   //nonsensical background?
   //spread to large?
-  if (abs(params[3]) >= size*0.5 || abs(params[4]) >= size*0.5)
+  if (abs(params[3]) >= size*0.2 || abs(params[4]) >= size*0.2)
     return FLT_MAX;
-  if (abs(params[3]) <= size*0.2 || abs(params[4]) >= size*0.2)
-    return FLT_MAX;
+  //if (abs(params[3]) <= size*0.05 || abs(params[4]) >= size*0.05)
+    //return FLT_MAX;
   
   //rms scaled with amplitude (small amplitude needs lower rms!
   //printf("scale %f a %f b %f spread %f/%f ", 255.0/abs(params[2]-params[5]), params[2], params[5], params[3], params[4]);
   double contrast = abs(params[2]-params[5]);
-  return sqrt(summary2.final_cost/problem_gauss.NumResiduals())*255.0/contrast;
+  return sqrt(summary2.final_cost/problem_gauss.NumResiduals())*255.0/contrast/params[5] + 0.5*rms_use_limit*min_fitted_contrast/contrast;
 }
 
 class Interpolated_Corner {
