@@ -263,7 +263,7 @@ int main(int argc, char* argv[])
   else
     gray = img;
   
-  vector<Corner> corners_sub; 
+  /*vector<Corner> corners_sub; 
   detect_sub_corners(gray , corners_f, corners_sub, 1, 0.0, 10, 1);
   
   vector<Corner> corners_f2;
@@ -279,7 +279,10 @@ int main(int argc, char* argv[])
   detect_sub_corners(gray , corners_f3, corners_sub3, 2, 0.5, 5, 0);
   
   vector<Corner> corners_f4;
-  check_calibration(corners_sub3, img.size().width, img.size().height, img, corners_f4);
+  check_calibration(corners_sub3, img.size().width, img.size().height, img, corners_f4);*/
+  
+  vector<Corner> corners_sub; 
+  hdmarker_detect_subpattern(gray, corners_f, corners_sub, 3);
   
   imwrite(argv[2], paint);
   

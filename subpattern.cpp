@@ -350,7 +350,7 @@ uint64_t id_to_key(Point2i id)
 
 typedef unordered_map<uint64_t, Interpolated_Corner> IntCMap;
 
-void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset)
+void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset)
 {  
   int counter = 0;
   sort(corners.begin(), corners.end(), corner_cmp);
@@ -470,4 +470,24 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
       }
   }
   printf("\n");
+}
+
+void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth)
+{
+  vector<Corner> ca, cb;
+  if (depth <= 0) {
+    corners_out = corners;
+    return;
+  }
+  
+  ca = corners;
+  hdmarker_subpattern_step(img, ca, cb, 1, 0.0, 10, 1);
+  
+  for(int i=2;i<=depth;i++) {
+    ca = cb;
+    cb.resize(0);
+    hdmarker_subpattern_step(img , ca, cb, 2, 0.5, 5, 0);
+  }
+    
+  corners_out = cb;
 }

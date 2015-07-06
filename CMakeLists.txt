@@ -33,24 +33,24 @@ include_directories("/usr/include/valgrind/")
 
 add_library(hdmarker SHARED hdmarker.cpp gridstore.cpp timebench.cpp)
 
-add_library(subpattern subpattern.cpp)
+add_library(hdmarker_subpattern subpattern.cpp)
 
 target_link_libraries(hdmarker ${OpenCV_LIBS})
-target_link_libraries(subpattern ${OpenCV_LIBS} ${CERES_LIBRARIES})
+target_link_libraries(hdmarker_subpattern ${OpenCV_LIBS} ${CERES_LIBRARIES})
 
 add_executable(hdmarker_generate marker_gen.cpp)
 add_executable(hdmarker_test test.cpp)
 #add_executable(hdmarker_scaletest testscales.cpp)
 target_link_libraries(hdmarker_generate ${OpenCV_LIBS} hdmarker)
 set(CMAKE_CXX_FLAGS "-Wall -g -O3 -std=c++11 -Wall -fopenmp")
-target_link_libraries(hdmarker_test hdmarker subpattern)
+target_link_libraries(hdmarker_test hdmarker hdmarker_subpattern)
 #target_link_libraries(hdmarker_scaletest ${OpenCV_LIBS} hdmarker)
 
 configure_file(hdmarker.pc.in hdmarker.pc @ONLY)
 
 install(FILES hdmarker.pc DESTINATION lib/pkgconfig)
 install(FILES hdmarker.hpp subpattern.hpp gridstore.hpp DESTINATION include/hdmarker)
-install(TARGETS hdmarker_test hdmarker_generate hdmarker
+install(TARGETS hdmarker_test hdmarker_generate hdmarker hdmarker_subpattern
             RUNTIME DESTINATION bin
             LIBRARY DESTINATION lib
-            ARCHIVE DESTINATION lib/static)
+            ARCHIVE DESTINATION lib)
