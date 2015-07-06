@@ -29,6 +29,8 @@ const float min_fitted_contrast = 10.0; //minimum amplitude of fitted gaussian
 
 const float rms_use_limit = 5.0;
 
+const float recurse_min_len = 5.0;
+
 const int int_search_range = 11;
 
 const double subfit_max_range = 0.2;
@@ -123,12 +125,14 @@ bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<
   }
   
   inliers.resize(world_points_check.size());
-  Mat hom = findHomography(img_points_check[0], world_points_check, CV_RANSAC, 100, inliers);
+  Mat hom = findHomography(world_points_check, img_points_check[0], CV_RANSAC, 100, inliers);
   
-  //vector<Point2f> proj;
-  //perspectiveTransform(img_points_check[0], proj, hom);
+  vector<Point2f> proj;
+  perspectiveTransform(world_points_check, proj, hom);
   
+  double rms = 0.0;
   for(uint i=0;i<inliers.size();i++) {
+    rms += norm(img_points_check[0][i]-proj[i])*norm(img_points_check[0][i]-proj[i]);
     //printf("input %d distance %f\n", pos[i], norm(world_points_check[i]-proj[i]));
     if (!inliers[i])
       continue;
@@ -139,6 +143,7 @@ bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<
         img_points[c].push_back((img_points_check[c])[i]);
     world_points.push_back(add_zero_z(world_points_check[i]));
   }
+  printf("homography rms: %f\n", sqrt(rms/inliers.size()));
   
   printf("findHomography: %d inliers of %d calibration points (%.2f%%)\n", img_points[0].size(),img_points_check[0].size(),img_points[0].size()*100.0/img_points_check[0].size());
 
@@ -381,6 +386,63 @@ struct Gauss2dError {
   double w_, sw_, m_;
 };
 
+
+struct Gauss2dCenterError {
+  Gauss2dCenterError(int val, int x, int y, double m, double sw, double w)
+      : val_(val), x_(x), y_(y), m_(m), sw_(sw), w_(w) {}
+
+/**
+ * used function: 
+ */
+  template <typename T>
+  bool operator()(const T* const p,
+                  T* residuals) const {
+    T x2 = T(x_) - T(m_);
+    T y2 = T(y_) - T(m_);
+    T sx2 = T(2.0)*p[1]*p[1];
+    T sy2 = T(2.0)*p[2]*p[2];
+    x2 = x2*x2;
+    y2 = y2*y2;
+
+    residuals[0] = (T(val_) - (p[3] + (p[0]-p[3])*exp(-(x2/sx2+y2/sy2))))*T(sw_);
+    
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(int val, int x, int y, double m, double sw, double w) {
+    return (new ceres::AutoDiffCostFunction<Gauss2dCenterError, 1, 4>(
+                new Gauss2dCenterError(val, x, y, m, sw, w)));
+  }
+
+  int x_, y_, val_;
+  double w_, sw_, m_;
+};
+
+template <typename T> inline T clamp(const T& n, const T& lower, const T& upper)
+{
+  return std::max<T>(lower, std::min<T>(n, upper));
+}
+
+void draw_gauss2d(Mat &img, double *p)
+{
+  uint8_t *ptr = img.ptr<uchar>(0);
+  double m = img.size().width * 0.5;
+  
+  for(int y=0;y<img.size().height;y++)
+    for(int x=0;x<img.size().width;x++) {
+      double x2 = x - p[0];
+      double y2 = y - p[1];
+      double sx2 = 2.0*p[3]*p[3];
+      double sy2 = 2.0*p[4]*p[4];
+      x2 = x2*x2;
+      y2 = y2*y2;
+
+      ptr[y*img.size().width+x] = clamp<int>(p[5] + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2)), 0, 255);
+    }
+}
+
 /**
  * Fit 2d gaussian to image, 5 parameter: \f$x_0\f$, \f$y_0\f$, amplitude, spread, background
  * disregards a border of \f$\lfloor \mathit{size}/5 \rfloor\f$ pixels
@@ -398,8 +460,8 @@ double fit_gauss(Mat &img, double *params)
   double params_cpy[6];
   
   //x,y
-  params[0] = size*0.5;
-  params[1] = size*0.5;
+  params[0] = 0.0;
+  params[1] = 0.0;
   
   int sum = 0;
   int x, y = b;
@@ -432,7 +494,7 @@ double fit_gauss(Mat &img, double *params)
     params_cpy[i] = params[i];
 
   
-  ceres::Problem problem_gauss;
+  ceres::Problem problem_gauss_center;
   for(y=0;y<size-0;y++)
     for(x=0;x<size-0;x++) {
       double x2 = x-size*0.5;
@@ -442,8 +504,8 @@ double fit_gauss(Mat &img, double *params)
       double s2 = size*0.5;
       s2=s2*s2;
       double sw = exp(-x2/s2-y2/s2);
-      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, size*0.5, sw, size*size*0.25);
-      problem_gauss.AddResidualBlock(cost_function, NULL, params);
+      ceres::CostFunction* cost_function = Gauss2dCenterError::Create(ptr[y*size+x], x, y, size*0.5, sw, size*size*0.25);
+      problem_gauss_center.AddResidualBlock(cost_function, NULL, params+2);
     }
   
   ceres::Solver::Options options;
@@ -451,7 +513,24 @@ double fit_gauss(Mat &img, double *params)
   options.linear_solver_type = ceres::DENSE_QR;
   
   ceres::Solver::Summary summary;
-  ceres::Solve(options, &problem_gauss, &summary);
+  ceres::Solve(options, &problem_gauss_center, &summary);
+  
+  ceres::Problem problem_gauss;
+  for(y=0;y<size-0;y++)
+    for(x=0;x<size-0;x++) {
+      double x2 = x-size*0.5;
+      double y2 = y-size*0.5;
+      x2 = x2*x2;
+      y2 = y2*y2;
+      double s2 = size*0.25;
+      s2=s2*s2;
+      double sw = exp(-x2/s2-y2/s2);
+      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, size*0.5, sw, size*size*0.25);
+      problem_gauss.AddResidualBlock(cost_function, NULL, params);
+    }
+  
+  ceres::Solver::Summary summary2;
+  ceres::Solve(options, &problem_gauss, &summary2);
   
   params[0] = size*0.5+sin(params[0])*(size*subfit_max_range);
   params[1] = size*0.5+sin(params[1])*(size*subfit_max_range);
@@ -461,7 +540,8 @@ double fit_gauss(Mat &img, double *params)
   if (summary.termination_type != ceres::CONVERGENCE)
     return FLT_MAX;
   
-  return sqrt(summary.final_cost/problem_gauss.NumResiduals());
+  //rms scaled with amplitude (small amplitude needs lower rms!
+  return sqrt(summary2.final_cost/problem_gauss.NumResiduals())*255.0/abs(params[2]-params[5]);
 }
 
 class Interpolated_Corner {
@@ -492,6 +572,7 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
   sort(corners.begin(), corners.end(), corner_cmp);
   
   IntCMap corners_interpolated;
+  vector<Mat> blurimgs;
   
 #pragma omp parallel for schedule(dynamic)
   for(int i=0;i<corners.size();i++) {
@@ -555,11 +636,13 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
         maxlen = sqrt(maxlen);
         //printf("longest side %f\n", maxlen);
         
-        if (maxlen < 5*4)
+        if (maxlen < 5*recurse_min_len)
           continue;
         
         //FIXME need to use scale-space for perspective transform?
         size = std::max<int>(std::min<int>(maxlen*subfit_oversampling/5, subfit_max_size), subfit_min_size);
+        /*int undersampling = max(maxlen / size, 1);
+        int undersampling_idx = log2(undersampling);*/
         
         for(int y=0;y<5;y++)
           for(int x=0;x<5;x++) {
@@ -579,6 +662,7 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
             if (rms >= rms_use_limit)
               continue;
             
+            
             vector<Point2f> coords(1);
             coords[0] = Point2f(params[0], params[1]);
             vector<Point2f> res(1);
@@ -586,7 +670,18 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
             
             Corner c_o(res[0], Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), 0);
     #pragma omp critical
+            {
+            /*char buf[128];
+            sprintf(buf, "point%07d.tif", corners_out.size());
+            imwrite(buf, proj);
+            draw_gauss2d(proj, params);
+            sprintf(buf, "point%07d_fit.tif", corners_out.size());
+            imwrite(buf, proj);
+            printf("%d %fx%f rms %f\n", corners_out.size(), c_o.p.x, c_o.p.y, rms);*/
+              
             corners_out.push_back(c_o);
+            
+            }
           }
 
       }
