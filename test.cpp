@@ -24,12 +24,12 @@ const bool demosaic = false;
 const float subfit_oversampling = 2.0;
 const int subfit_max_size = 30;
 const int subfit_min_size = 1;
-const float min_fit_contrast = 3.0;
+const float min_fit_contrast = 1.0;
 const float min_fitted_contrast = 5.0; //minimum amplitude of fitted gaussian
 
 const float rms_use_limit = 1000.0;
 
-const float recurse_min_len = 5.0;
+const float recurse_min_len = 4.0;
 
 const int int_search_range = 11;
 
@@ -791,7 +791,7 @@ int main(int argc, char* argv[])
     gray = img;
   
   vector<Corner> corners_sub; 
-  detect_sub_corners(gray , corners_f, corners_sub, paint, 1, 0.0, 100.0, 10, 1);
+  detect_sub_corners(gray , corners_f, corners_sub, paint, 1, 0.0, rms_use_limit, 10, 1);
   
   vector<Corner> corners_f2;
   check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f2);
