@@ -132,10 +132,9 @@ bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<
   
   double rms = 0.0;
   for(uint i=0;i<inliers.size();i++) {
-    rms += norm(img_points_check[0][i]-proj[i])*norm(img_points_check[0][i]-proj[i]);
-    //printf("input %d distance %f\n", pos[i], norm(world_points_check[i]-proj[i]));
     if (!inliers[i])
       continue;
+    rms += norm(img_points_check[0][i]-proj[i])*norm(img_points_check[0][i]-proj[i]);
     corners_filtered.push_back(corners[pos[i]]);
     img_points[0].push_back((img_points_check[0])[i]);
     for(int c=1;c<4;c++)
@@ -182,14 +181,14 @@ void calibrate_channel(vector<vector<Point2f> > &img_points, vector<vector<Point
     line(paint, c-Point2f(0,2), c+Point2f(0,2), Scalar(0,255,0));
     line(paint, c, c+10*d, Scalar(0,0,255));*/
     
-    if (norm(img_points[0][i]-Point2f(1709,1087)) <= 3.0)
-      printf("paint the point!\n");
-    
     Point2f c = img_points[0][i];
     Point2f d = projected[i] - img_points[0][i];
     line(paint, c-Point2f(2,0), c+Point2f(2,0), Scalar(0,255,0));
     line(paint, c-Point2f(0,2), c+Point2f(0,2), Scalar(0,255,0));
     line(paint, c, c+10*d, Scalar(0,0,255));
+    
+    if (norm(d) >= 1.0)
+      printf("%fx%f - %dx%f : distance %f\n", projected[i].x,projected[i].y,img_points[0][i].x,img_points[0][i].y);
   }
   
   imwrite("off_hdm.jpg", paint);
@@ -673,30 +672,13 @@ void detect_sub_corners(Mat &img, vector<Corner> corners, vector<Corner> &corner
             double params[6];
             double rms = fit_gauss(proj, params);
             
+            if (rms >= rms_use_limit)
+              continue;
+            
             vector<Point2f> coords(1);
             coords[0] = Point2f(params[0], params[1]);
             vector<Point2f> res(1);
             perspectiveTransform(coords, res, pers_i);
-            
-            bool track = false;
-            
-            if (norm(res[0]-Point2f(1709,1087)) <= 3.0)
-#pragma omp critical
-            {
-              track = true;
-              char buf[128];
-              sprintf(buf, "point%07d.tif", corners_out.size());
-              imwrite(buf, proj);
-              draw_gauss2d(proj, params);
-              sprintf(buf, "point%07d_fit.tif", corners_out.size());
-              imwrite(buf, proj);
-              printf("%d rms %f\n", corners_out.size(), rms);
-              printf("%f %f %f %f %f %f\n", params[0], params[1], params[2],params[3],params[4],params[5]);
-            }
-            
-            
-            if (rms >= rms_use_limit)
-              continue;
             
             Corner c_o(res[0], Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), 0);
     #pragma omp critical
