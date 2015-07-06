@@ -542,15 +542,16 @@ double fit_gauss(Mat &img, double *params)
   if (params[5] <= 0 || params[5] >= 255)
     return FLT_MAX;
   //nonsensical background?
-  if (params[5] <= 0 || params[5] >= 255)
-    return FLT_MAX;
   //spread to large?
   if (abs(params[3]) >= size*0.5 || abs(params[4]) >= size*0.5)
+    return FLT_MAX;
+  if (abs(params[3]) <= size*0.2 || abs(params[4]) >= size*0.2)
     return FLT_MAX;
   
   //rms scaled with amplitude (small amplitude needs lower rms!
   //printf("scale %f a %f b %f spread %f/%f ", 255.0/abs(params[2]-params[5]), params[2], params[5], params[3], params[4]);
-  return sqrt(summary2.final_cost/problem_gauss.NumResiduals())*255.0/abs(params[2]-params[5]);
+  double contrast = abs(params[2]-params[5]);
+  return sqrt(summary2.final_cost/problem_gauss.NumResiduals())*255.0/contrast;
 }
 
 class Interpolated_Corner {
