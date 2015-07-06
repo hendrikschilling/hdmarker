@@ -186,9 +186,6 @@ void calibrate_channel(vector<vector<Point2f> > &img_points, vector<vector<Point
     line(paint, c-Point2f(2,0), c+Point2f(2,0), Scalar(0,255,0));
     line(paint, c-Point2f(0,2), c+Point2f(0,2), Scalar(0,255,0));
     line(paint, c, c+10*d, Scalar(0,0,255));
-    
-    if (norm(d) >= 1.0)
-      printf("%fx%f - %fx%f : distance %f\n", projected[i].x,projected[i].y,img_points[0][i].x,img_points[0][i].y, norm(d));
   }
   
   imwrite("off_hdm.jpg", paint);
