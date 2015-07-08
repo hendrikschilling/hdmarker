@@ -25,8 +25,9 @@ static const float rms_use_limit = 1000.0;
 static const float recurse_min_len = 4.0;
 static const int int_search_range = 11;
 static const double subfit_max_range = 0.2;
+static const double fit_gauss_max_tilt = 0.1;
 static double max_accept_dist = 3.0;
-static const float signcheck_size = 5;
+static const float signcheck_size = 0;
 
 #include <stdarg.h>
 
@@ -196,6 +197,43 @@ struct Gauss2dDirectError {
 };
 
 
+struct Gauss2dPlaneDirectError {
+  Gauss2dPlaneDirectError(int val, int x, int y, double w, double h, double px, double py, double sw)
+      : val_(val), x_(x), y_(y), w_(w), h_(h), px_(px), py_(py), sw_(sw){}
+
+/**
+ * used function: 
+ */
+  template <typename T>
+  bool operator()(const T* const p,
+                  T* residuals) const {
+    T x2 = T(x_) - (T(px_)+sin(p[0])*T(w_*subfit_max_range));
+    T y2 = T(y_) - (T(py_)+sin(p[1])*T(h_*subfit_max_range));
+    T dx = T(x_) - T(px_);
+    T dy = T(y_) - T(py_);
+    T sx2 = T(2.0)*p[3]*p[3];
+    T sy2 = T(2.0)*p[4]*p[4];
+    x2 = x2*x2;
+    y2 = y2*y2;
+    
+    residuals[0] = (T(val_) - (p[5] + p[6]*dx + p[7]*dy + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*T(sw_);
+    
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(int val, int x, int y, double w, double h, double px, double py, double sw) {
+    return (new ceres::AutoDiffCostFunction<Gauss2dPlaneDirectError, 1, 8>(
+                new Gauss2dPlaneDirectError(val, x, y, w, h, px, py, sw)));
+  }
+
+  int x_, y_, val_;
+  double w_, sw_, px_, py_, h_;
+};
+
+
+
 struct Gauss2dCenterError {
   Gauss2dCenterError(int val, int x, int y, double m, double sw)
       : val_(val), x_(x), y_(y), m_(m), sw_(sw) {}
@@ -301,6 +339,26 @@ static void draw_gauss2d_direct(Mat &img, Point2f c, Point2f res, Point2i size, 
       x2 = x2*x2;
       y2 = y2*y2;
       ptr[y*w+x] = clamp<int>(p[5] + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2)), 0, 255);
+    }
+}
+
+
+static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i size, double *p)
+{
+  uint8_t *ptr = img.ptr<uchar>(0);
+  int w = img.size().width;
+  
+  for(int y=c.y-size.y/2;y<=c.y+size.y/2;y++)
+    for(int x=c.x-size.x/2;x<=c.x+size.x/2;x++) {
+      double x2 = x - res.x;
+      double y2 = y - res.y;
+      double dx = x - c.x;
+      double dy = y - c.y;
+      double sx2 = 2.0*p[3]*p[3];
+      double sy2 = 2.0*p[4]*p[4];
+      x2 = x2*x2;
+      y2 = y2*y2;
+      ptr[y*w+x] = clamp<int>(p[5] + p[6]*dx + p[7]*dy + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2)), 0, 255);
     }
 }
 
@@ -430,7 +488,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
   assert(img.depth() == CV_8U);
   assert(img.channels() == 1);
   
-  double params_static[6];
+  double params_static[8];
   
   if (!params)
     params = params_static;
@@ -469,6 +527,10 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
   params[3] = size.x*0.1;
   params[4] = size.y*0.1;
   
+  //tilt
+  params[6] = 0.0;
+  params[7] = 0.0;
+  
   ceres::Problem problem_gauss_center;
   for(y=area.y;y<area.br().y;y++)
     for(x=area.x;x<area.br().x;x++) {
@@ -506,14 +568,30 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
       problem_gauss.AddResidualBlock(cost_function, NULL, params);
     }
     
-    
+  ceres::Solve(options, &problem_gauss, &summary);
   
-  ceres::Solver::Summary summary2;
-  ceres::Solve(options, &problem_gauss, &summary2);
+  area = Rect(p.x+0.5-hw.x, p.y+0.5-hw.y, size.x, size.y);
+  
+  ceres::Problem problem_gauss_plane;
+  for(y=area.y;y<area.br().y;y++)
+    for(x=area.x;x<area.br().x;x++) {
+      double x2 = x-p.x;
+      double y2 = y-p.y;
+      x2 = x2*x2;
+      y2 = y2*y2;
+      double s2 = sqrt(size.x*size.x+size.y*size.y);
+      s2=s2*s2;
+      double sw = exp(-x2/s2-y2/s2);
+      ceres::CostFunction* cost_function = Gauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, 1.0);
+      problem_gauss_plane.AddResidualBlock(cost_function, NULL, params);
+    }
+    
+
+  ceres::Solve(options, &problem_gauss_plane, &summary);
   
   //std::cout << summary2.FullReport() << "\n";
   
-  //printf("%fx%f", p.x, p.y);
+  //printf("%fx%f\n", params[6], params[7]);
   
   Point2f c = p;
   
@@ -522,6 +600,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
   
   //printf(" -> %fx%f rms %f\n", p.x, p.y, sqrt(summary2.final_cost/problem_gauss.NumResiduals()));
   
+  double contrast = abs(params[2]-params[5]);
   
   //if (abs(params[2]-params[5]) <= min_fitted_contrast)
     //return FLT_MAX;
@@ -535,16 +614,17 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
     return FLT_MAX;
   if (abs(params[3]) <= size.x*0.05 || abs(params[4]) <= size.y*0.05)
     return FLT_MAX;
+  if (abs(params[6])*size.x >= contrast*0.5 || abs(params[7])*size.x >= contrast*0.5)
+    return FLT_MAX;
   
   if (paint)
-    draw_gauss2d_direct(*paint, c, p, size, params);
+    draw_gauss2d_plane_direct(*paint, c, p, size, params);
 
   //rms scaled with amplitude (small amplitude needs lower rms!
   //printf("scale %f a %f b %f spread %f/%f ", 255.0/abs(params[2]-params[5]), params[2], params[5], params[3], params[4]);
-  double contrast = abs(params[2]-params[5]);
   //return sqrt(summary2.final_cost/problem_gauss.NumResiduals())*255.0/contrast + rms_use_limit*min_fitted_contrast/contrast;
   
-  return sqrt(summary2.final_cost/problem_gauss.NumResiduals());
+  return sqrt(summary.final_cost/problem_gauss.NumResiduals());
 }
 
 class Interpolated_Corner {
@@ -675,7 +755,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
                                 + (x+in_c_offset)*(ipoints[1]-ipoints[0])*0.2
                                 + (y+in_c_offset)*(ipoints[3]-ipoints[0])*0.2;
             
-            double params[6];
+            double params[8];
             double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, &paint, params);
             
             if (rms >= rms_use_limit)
