@@ -715,7 +715,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, IntCM
         Point2f refine_p = c.p + (c.p-second);
         
         float len = norm(c.p-second);
-        float maxlen = sqrt(len*len / (sy*sy + sx*sx))*10.0;
+        float maxlen = sqrt(len*len / (sy*sy + sx*sx))*10.0/idx_step;
         
         if (refine_p.x - maxlen*0.1 <= 0 || refine_p.y - maxlen*0.1 <= 0
             || refine_p.x + maxlen*0.1 >= img.size().width || refine_p.y + maxlen*0.1 >= img.size().height) {
