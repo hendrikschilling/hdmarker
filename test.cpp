@@ -15,8 +15,8 @@
 using namespace std;
 using namespace cv;
 
-const int grid_width = 16;
-const int grid_height = 14;
+const int grid_width = 1;
+const int grid_height = 1;
 
 const bool use_rgb = false;
 
@@ -282,7 +282,8 @@ int main(int argc, char* argv[])
   check_calibration(corners_sub3, img.size().width, img.size().height, img, corners_f4);*/
   
   vector<Corner> corners_sub; 
-  hdmarker_detect_subpattern(gray, corners_f, corners_sub, 3);
+  double msize = 1.0;
+  hdmarker_detect_subpattern(gray, corners_f, corners_sub, 2, &msize);
   
   vector<Corner> corners_f2;
   check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f2);
