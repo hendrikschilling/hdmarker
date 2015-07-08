@@ -663,7 +663,7 @@ void addcorners(Rect_<float> area, Point2f c)
   area.height = max(c.y-area.y, area.height);
 }
 
-int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, int idx_step, Mat *paint = NULL)
+int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, IntCMap &blacklist, int idx_step, Mat *paint = NULL)
 {
   int counter = 0;
   int added = 0;
@@ -696,6 +696,8 @@ int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, int i
         {
           if (corners_map.find(id_to_key(extr_id)) != corners_map.end())
             do_continue = true;
+          if (blacklist.find(id_to_key(extr_id)) != corners_map.end())
+            do_continue = true;
           
           if (!do_continue) {
             Point2i search_id = Point2i(c.id)+Point2i(sx,sy)*idx_step;
@@ -715,16 +717,23 @@ int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, int i
         float len = norm(c.p-second);
         float maxlen = sqrt(len*len / (sy*sy + sx*sx))*10.0;
         
-        if (refine_p.x - maxlen*0.1 <= 0 || refine_p.y - maxlen*0.1 <= 0)
+        if (refine_p.x - maxlen*0.1 <= 0 || refine_p.y - maxlen*0.1 <= 0
+            || refine_p.x + maxlen*0.1 >= img.size().width || refine_p.y + maxlen*0.1 >= img.size().height) {
+            Interpolated_Corner c_i(extr_id, refine_p, false);
+#pragma omp critical
+            blacklist[id_to_key(c_i.id)] = c_i;
           continue;
-        if (refine_p.x + maxlen*0.1 >= img.size().width || refine_p.y + maxlen*0.1 >= img.size().height)
-          continue;
+        }
         
         double params[8];
         double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, paint, params);
         
-        if (rms >= rms_use_limit)
+        if (rms >= rms_use_limit) {
+            Interpolated_Corner c_i(extr_id, refine_p, false);
+#pragma omp critical
+            blacklist[id_to_key(c_i.id)] = c_i;
           continue;
+        }
         
         Corner c_o(refine_p, extr_id, 0);
         Interpolated_Corner c_i(extr_id, refine_p, false);
@@ -867,10 +876,12 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   
   printf("found %d valid corners                                                  \n", corners_out.size());
 
+  IntCMap blacklist;
+  
   int found = 1;
   while (found) {
     imwrite("fitted.tif", paint);
-    found = hdmarker_subpattern_checkneighbours(img, corners_out, in_idx_step, &paint);
+    found = hdmarker_subpattern_checkneighbours(img, corners_out, blacklist, in_idx_step, &paint);
   }
   
 }
