@@ -19,13 +19,13 @@ using namespace cv;
 static const float subfit_oversampling = 2.0;
 static const int subfit_max_size = 30;
 static const int subfit_min_size = 1;
-static const float min_fit_contrast = 1.0;
+static const float min_fit_contrast = -1.0;
 static const float min_fitted_contrast = 5.0; //minimum amplitude of fitted gaussian
 static const float rms_use_limit = 100.0;
 static const float recurse_min_len = 4.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 11;
-static const double subfit_max_range = 0.3;
+static const double subfit_max_range = 0.2;
 static const double fit_gauss_max_tilt = 0.1;
 static double max_accept_dist = 3.0;
 
@@ -71,7 +71,7 @@ static bool corner_find_off_save(vector<Corner> &corners, Corner ref, int x, int
   ref.id.x += x;
   ref.id.y += y;
   found = lower_bound(corners.begin(), corners.end(), ref, corner_cmp);
-  if (found->id != ref.id)
+  if (found == corners.end() || found->id != ref.id)
     return true;
   out = found->p;
   return false;
@@ -91,7 +91,8 @@ static bool corner_find_off_save_int(vector<Corner> &corners, Corner ref, int x,
   search.id.x += x;
   search.id.y += y;
   found = lower_bound(corners.begin(), corners.end(), search, corner_cmp);
-  if (found->id == search.id) {
+  
+  if (found != corners.end() && found->id == search.id) {
     out = found->p;
     return false;
   }
@@ -511,7 +512,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
   params[0] = 0.0;
   params[1] = 0.0;
   
-  Rect area(p.x+0.5-hw.x+b.x, p.y+0.5-hw.y+b.y, size.x-2*b.x, size.y-2*b.y);
+  Rect area(p.x-hw.x+b.x, p.y-hw.y+b.y, size.x-2*b.x, size.y-2*b.y);
   
   int sum = 0;
   int x, y = area.y;
@@ -584,8 +585,6 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
     
   ceres::Solve(options, &problem_gauss, &summary);
   
-  area = Rect(p.x+0.5-hw.x, p.y+0.5-hw.y, size.x, size.y);
-  
   ceres::Problem problem_gauss_plane;
   for(y=area.y;y<area.br().y;y++)
     for(x=area.x;x<area.br().x;x++) {
@@ -637,7 +636,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
 class Interpolated_Corner {
 public:
   Point2i id;
-  Point3f p;
+  Point2f p;
   bool used_as_start_corner = false;
   
   Interpolated_Corner() {};
@@ -664,6 +663,87 @@ void addcorners(Rect_<float> area, Point2f c)
   area.height = max(c.y-area.y, area.height);
 }
 
+int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, int idx_step, Mat *paint = NULL)
+{
+  int counter = 0;
+  int added = 0;
+  
+  IntCMap int_corners;
+  IntCMap corners_map;
+  
+  for(int i=0;i<corners.size();i++) {
+    Corner c = corners[i];
+    Interpolated_Corner c_i(c.id, c.p, false);
+    corners_map[id_to_key(corners[i].id)] = c_i;
+  }
+  
+#pragma omp parallel for schedule(dynamic)
+  for(int i=0;i<corners.size();i++) {
+    Corner c;
+#pragma omp critical
+    {
+      printprogress(i, corners.size(), counter, " %d corners", corners.size());
+      c = corners[i];
+    }
+    
+    for(int sy=-int_extend_range;sy<=int_extend_range;sy++)
+      for(int sx=-int_extend_range;sx<=int_extend_range;sx++) {
+        
+        Point2i extr_id = Point2i(c.id)-Point2i(sx,sy)*idx_step;
+        Point2f second;
+        bool do_continue = false;
+#pragma omp critical
+        {
+          if (corners_map.find(id_to_key(extr_id)) != corners_map.end())
+            do_continue = true;
+          
+          if (!do_continue) {
+            Point2i search_id = Point2i(c.id)+Point2i(sx,sy)*idx_step;
+            IntCMap::iterator it = corners_map.find(id_to_key(search_id));
+            
+            if (it == corners_map.end())
+              do_continue = true;
+            else
+              second = it->second.p;
+          }
+        }
+        if (do_continue)
+          continue;
+        
+        Point2f refine_p = c.p + (c.p-second);
+        
+        float len = norm(c.p-second);
+        float maxlen = sqrt(len*len / (sy*sy + sx*sx))*10.0;
+        
+        if (refine_p.x - maxlen*0.1 <= 0 || refine_p.y - maxlen*0.1 <= 0)
+          continue;
+        if (refine_p.x + maxlen*0.1 >= img.size().width || refine_p.y + maxlen*0.1 >= img.size().height)
+          continue;
+        
+        double params[8];
+        double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, paint, params);
+        
+        if (rms >= rms_use_limit)
+          continue;
+        
+        Corner c_o(refine_p, extr_id, 0);
+        Interpolated_Corner c_i(extr_id, refine_p, false);
+#pragma omp critical
+        {
+          added++;
+          corners_map[id_to_key(extr_id)] = c_i;
+          corners.push_back(c_o); 
+        }
+        goto finish_add;
+      }
+      finish_add:;
+  }
+  
+  printf("added %d corners\n", added);
+  
+  return added;
+}
+
 void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours)
 {  
   int counter = 0;
@@ -680,8 +760,8 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
 #pragma omp critical (_print_)
     printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
     int sy = 0;
-    for(int sy=-int_extend_range;sy<=int_extend_range;sy++)
-      for(int sx=-int_extend_range;sx<=int_extend_range;sx++) {
+    for(int sy=-int_search_range;sy<=int_search_range;sy++)
+      for(int sx=-int_search_range;sx<=int_search_range;sx++) {
         vector<Point2f> ipoints(4);
         Corner c = corners[i];
         int size;
@@ -691,7 +771,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
         else {
           Corner newc;
           //exists in corners
-          if (!corner_find_off_save(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0]))
+          if (!corner_find_off_save_int(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0], int_search_range))
             continue;
           
           bool do_continue = false;
@@ -705,7 +785,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             
             if (!do_continue)
               //interpolate from corners
-              if (corner_find_off_save_int(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0], int_search_range))
+              if (corner_find_off_save(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0]))
                 do_continue = true;
             
             if (!do_continue) {
@@ -736,7 +816,11 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             maxlen = len;
         }
         maxlen = sqrt(maxlen);
+        
         //printf("longest side %f\n", maxlen);
+        
+        //if (maxlen >= 50 && maxlen <= 100)
+          //abort();
         
         //if (maxlen < 5*recurse_min_len)
           //continue;
@@ -783,7 +867,12 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   
   printf("found %d valid corners                                                  \n", corners_out.size());
 
-  imwrite("fitted.tif", paint);
+  int found = 1;
+  while (found) {
+    imwrite("fitted.tif", paint);
+    found = hdmarker_subpattern_checkneighbours(img, corners_out, in_idx_step, &paint);
+  }
+  
 }
 
 void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size)

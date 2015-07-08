@@ -101,7 +101,7 @@ bool calib_savepoints(vector<vector<Point2f> > all_img_points[4], vector<vector<
   }
   printf("homography rms: %f\n", sqrt(rms/inliers.size()));
   
-  printf("findHomography: %d inliers of %d calibration points (%.2f%%)\n", img_points[0].size(),img_points_check[0].size(),img_points[0].size()*100.0/img_points_check[0].size());
+  printf("findHomography: %lu inliers of %lu calibration points (%.2f%%)\n", img_points[0].size(),img_points_check[0].size(),img_points[0].size()*100.0/img_points_check[0].size());
 
   (all_img_points[0])[0] = img_points[0];
   for(int c=1;c<4;c++)
@@ -131,7 +131,7 @@ void calibrate_channel(vector<vector<Point2f> > &img_points, vector<vector<Point
   else
     paint = img.clone();
   //resize(paint, paint, Size(Point2i(paint.size())*4), INTER_LINEAR);
-  for(int i=0;i<projected.size();i++) {
+  for(uint i=0;i<projected.size();i++) {
     /*Point2f c = img_points[0][i]*4.0+Point2f(2,2);
     Point2f d = projected[i] - img_points[0][i];
     line(paint, c-Point2f(2,0), c+Point2f(2,0), Scalar(0,255,0));
@@ -153,7 +153,6 @@ void check_calibration(vector<Corner> &corners, int w, int h, Mat &img, vector<C
   vector<Mat> rvecs, tvecs;
   Mat cameraMatrix(3,3,cv::DataType<double>::type);
   Mat distCoeffs;
-  double rms;
   vector<Point2f> projected;
   Mat paint;
   
@@ -165,7 +164,7 @@ void check_calibration(vector<Corner> &corners, int w, int h, Mat &img, vector<C
     for(int c=1;c<4;c++)
       img_points[c].resize(1);
     
-  printf("corners: %d\n", corners.size());
+  printf("corners: %lu\n", corners.size());
     
   if (!calib_savepoints(img_points, world_points, corners, grid_width, grid_height, corners_filtered)) {
     return;
