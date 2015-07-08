@@ -26,6 +26,7 @@ static const float recurse_min_len = 4.0;
 static const int int_search_range = 11;
 static const double subfit_max_range = 0.2;
 static double max_accept_dist = 3.0;
+static const float signcheck_size = 5;
 
 #include <stdarg.h>
 
@@ -177,7 +178,7 @@ struct Gauss2dDirectError {
     T sy2 = T(2.0)*p[4]*p[4];
     x2 = x2*x2;
     y2 = y2*y2;
-
+    
     residuals[0] = (T(val_) - (p[5] + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*T(sw_);
     
     return true;
@@ -419,7 +420,7 @@ static double fit_gauss(Mat &img, double *params)
  * Fit 2d gaussian to image, 5 parameter: \f$x_0\f$, \f$y_0\f$, amplitude, spread, background
  * disregards a border of \f$\lfloor \mathit{size}/5 \rfloor\f$ pixels
  */
-static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = NULL)
+static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = NULL, double *params = NULL)
 {
   int w = img.size().width;
   Point2i hw = size*0.5;
@@ -429,13 +430,16 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
   assert(img.depth() == CV_8U);
   assert(img.channels() == 1);
   
-  double params[6];
+  double params_static[6];
+  
+  if (!params)
+    params = params_static;
   
   //x,y
   params[0] = 0.0;
   params[1] = 0.0;
   
-  Rect area(p.x-hw.x+b.x, p.y-hw.y+b.y, size.x-2*b.x, size.y-2*b.y);
+  Rect area(p.x+0.5-hw.x+b.x, p.y+0.5-hw.y+b.y, size.x-2*b.x, size.y-2*b.y);
   
   int sum = 0;
   int x, y = area.y;
@@ -475,7 +479,6 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
       double s2 = sqrt(size.x*size.x+size.y*size.y)*0.5;
       s2=s2*s2;
       double sw = exp(-x2/s2-y2/s2);
-      //printf("%f\n", sw);
       ceres::CostFunction* cost_function = Gauss2dDirectCenterError::Create(ptr[y*w+x], x, y, p.y, p.y, sw);
       problem_gauss_center.AddResidualBlock(cost_function, NULL, params+2);
     }
@@ -541,7 +544,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
   double contrast = abs(params[2]-params[5]);
   //return sqrt(summary2.final_cost/problem_gauss.NumResiduals())*255.0/contrast + rms_use_limit*min_fitted_contrast/contrast;
   
-  return 0.0;
+  return sqrt(summary2.final_cost/problem_gauss.NumResiduals());
 }
 
 class Interpolated_Corner {
@@ -566,128 +569,6 @@ uint64_t id_to_key(Point2i id)
 
 typedef unordered_map<uint64_t, Interpolated_Corner> IntCMap;
 
-void hdmarker_subpattern_step_ur(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset)
-{  
-  int counter = 0;
-  sort(corners.begin(), corners.end(), corner_cmp);
-  
-  IntCMap corners_interpolated;
-  vector<Mat> blurimgs;
-  
-#pragma omp parallel for schedule(dynamic)
-  for(int i=0;i<corners.size();i++) {
-#pragma omp critical (_print_)
-    printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
-    for(int sy=-int_search_range;sy<=int_search_range;sy++)
-      for(int sx=-int_search_range;sx<=int_search_range;sx++) {
-        vector<Point2f> ipoints(4);
-        Corner c = corners[i];
-        int size;
-        
-        if (!sy && !sx)
-          ipoints[0] = corners[i].p;
-        else {
-          Corner newc;
-          //exists in corners
-          if (!corner_find_off_save(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0]))
-            continue;
-          
-          bool do_continue = false;
-#pragma omp critical (_map_)
-          {
-            IntCMap::iterator it;
-            Point2i id(c.id.x+sx*in_idx_step, c.id.y+sy*in_idx_step);
-            it = corners_interpolated.find(id_to_key(id));
-            if (it != corners_interpolated.end() && (*it).second.used_as_start_corner)
-              do_continue = true;
-            
-            if (!do_continue)
-              //interpolate from corners
-              if (corner_find_off_save_int(corners, c, sx*in_idx_step, sy*in_idx_step, ipoints[0], int_search_range))
-                do_continue = true;
-            
-            if (!do_continue) {
-              //set c to our interpolated corner id
-              c.id.x += sx*in_idx_step;
-              c.id.y += sy*in_idx_step;
-              
-              Interpolated_Corner c_i(c.id, c.p, true);
-              corners_interpolated[id_to_key(c.id)] = c_i;
-            }
-          }
-          if (do_continue)
-            continue;
-        }
-        if (corner_find_off_save_int(corners, c, in_idx_step, 0, ipoints[1], int_search_range)) continue;
-        if (corner_find_off_save_int(corners, c, in_idx_step, in_idx_step, ipoints[2], int_search_range)) continue;
-        if (corner_find_off_save_int(corners, c, 0, in_idx_step, ipoints[3], int_search_range)) continue;
-        
-        float maxlen = 0;
-        for(int i=0;i<4;i++) {
-          Point2f v = ipoints[i]-ipoints[(i+1)%4];
-          float len = v.x*v.x+v.y*v.y;
-          if (len > maxlen)
-            maxlen = len;
-          v = ipoints[(i+3)%4]-ipoints[i];
-          len = v.x*v.x+v.y*v.y;
-          if (len > maxlen)
-            maxlen = len;
-        }
-        maxlen = sqrt(maxlen);
-        //printf("longest side %f\n", maxlen);
-        
-        if (maxlen < 5*recurse_min_len)
-          continue;
-        
-        //FIXME need to use scale-space for perspective transform?
-        size = std::max<int>(std::min<int>(maxlen*subfit_oversampling/5, subfit_max_size), subfit_min_size);
-        /*int undersampling = max(maxlen / size, 1);
-        int undersampling_idx = log2(undersampling);*/
-        
-        for(int y=0;y<5;y++)
-          for(int x=0;x<5;x++) {
-            vector<Point2f> cpoints(4);
-            cpoints[0] = Point2f((in_c_offset-x)*size,(in_c_offset-y)*size);
-            cpoints[1] = Point2f((5+in_c_offset-x)*size,(in_c_offset-y)*size);
-            cpoints[2] = Point2f((5+in_c_offset-x)*size,(5+in_c_offset-y)*size);
-            cpoints[3] = Point2f((in_c_offset-x)*size,(5+in_c_offset-y)*size);
-            
-            Mat proj = Mat(size, size, CV_8U);
-            Mat pers = getPerspectiveTransform(ipoints, cpoints);
-            Mat pers_i = getPerspectiveTransform(cpoints, ipoints);
-            warpPerspective(img, proj, pers, Size(size, size), INTER_LINEAR);
-            
-            double params[6];
-            double rms = fit_gauss(proj, params);
-            
-            if (rms >= rms_use_limit)
-              continue;
-            
-            vector<Point2f> coords(1);
-            coords[0] = Point2f(params[0], params[1]);
-            vector<Point2f> res(1);
-            perspectiveTransform(coords, res, pers_i);
-            
-            Corner c_o(res[0], Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), 0);
-    #pragma omp critical
-            {
-            /*char buf[128];
-            sprintf(buf, "point%07d.tif", corners_out.size());
-            imwrite(buf, proj);
-            draw_gauss2d(proj, params);
-            sprintf(buf, "point%07d_fit.tif", corners_out.size());
-            imwrite(buf, proj);
-            printf("%d %fx%f rms %f\n", corners_out.size(), c_o.p.x, c_o.p.y, rms);*/
-              
-            corners_out.push_back(c_o);            
-            }
-          }
-
-      }
-  }
-  printf("\n");
-}
-
 void addcorners(Rect_<float> area, Point2f c)
 {
   area.x = min(c.x, area.x);
@@ -696,6 +577,7 @@ void addcorners(Rect_<float> area, Point2f c)
   area.height = max(c.y-area.y, area.height);
 }
 
+typedef unordered_map<uint64_t, bool> BoolMap;
 
 void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours)
 {  
@@ -703,14 +585,17 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   sort(corners.begin(), corners.end(), corner_cmp);
   
   IntCMap corners_interpolated;
+  BoolMap signs;
   vector<Mat> blurimgs;
+  
+  vector<Corner> corners_potential;
   
   Mat paint = Mat::zeros(img.size(), CV_8U);
   
 #pragma omp parallel for schedule(dynamic)
   for(int i=0;i<corners.size();i++) {
 #pragma omp critical (_print_)
-    printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
+    printprogress(i, corners.size(), counter, " %d subs", corners_potential.size());
     for(int sy=-int_search_range;sy<=int_search_range;sy++)
       for(int sx=-int_search_range;sx<=int_search_range;sx++) {
         vector<Point2f> ipoints(4);
@@ -780,9 +665,9 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
         for(int y=0;y<5;y++)
           for(int x=0;x<5;x++) {
             if (ignore_corner_neighbours) {
-              if (x + y == 1)
+              if (x + y <= 1)
                 continue;
-              if (x+y == 4)
+              if ((x == 4 && y == 0) || (x == 0 && y == 4))
                 continue;
             }
             //FIXME use proper (perspective?) center
@@ -790,7 +675,8 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
                                 + (x+in_c_offset)*(ipoints[1]-ipoints[0])*0.2
                                 + (y+in_c_offset)*(ipoints[3]-ipoints[0])*0.2;
             
-            double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, &paint);
+            double params[6];
+            double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, &paint, params);
             
             if (rms >= rms_use_limit)
               continue;
@@ -798,21 +684,33 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             Corner c_o(refine_p, Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), 0);
     #pragma omp critical
             {
-            /*char buf[128];
-            sprintf(buf, "point%07d.tif", corners_out.size());
-            imwrite(buf, proj);
-            draw_gauss2d(proj, params);
-            sprintf(buf, "point%07d_fit.tif", corners_out.size());
-            imwrite(buf, proj);
-            printf("%d %fx%f rms %f\n", corners_out.size(), c_o.p.x, c_o.p.y, rms);*/
-              
-            corners_out.push_back(c_o);            
+              if (maxlen <= signcheck_size)
+                signs[id_to_key(c_o.id)] = (params[2] > params[5]);
+              corners_potential.push_back(c_o); 
             }
           }
 
       }
   }
   printf("\n");
+  
+  for(int i=0;i<corners_potential.size();i++) {
+    bool signchange = false;
+    BoolMap::iterator it = signs.find(id_to_key(corners_potential[i].id));
+    if (it != signs.end()) {
+      bool sign = it->second;
+      for(int y=corners_potential[i].id.y-2;y<=corners_potential[i].id.y+2;y+=2)
+        for(int x=corners_potential[i].id.x-2;x<=corners_potential[i].id.x+2;x+=2) {
+          it = signs.find(id_to_key(Point2i(x,y)));
+          if (it != signs.end() && (*it).second != sign)
+                signchange = true;
+        }
+    }
+    if (!signchange)
+      corners_out.push_back(corners_potential[i]);
+  }
+  
+  printf("found %d valid corners                                                  \n", corners_out.size());
 
   imwrite("fitted.tif", paint);
 }
