@@ -21,13 +21,13 @@ static const int subfit_max_size = 30;
 static const int subfit_min_size = 1;
 static const float min_fit_contrast = 1.0;
 static const float min_fitted_contrast = 5.0; //minimum amplitude of fitted gaussian
-static const float rms_use_limit = 1000.0;
+static const float rms_use_limit = 100.0;
 static const float recurse_min_len = 4.0;
 static const int int_search_range = 11;
-static const double subfit_max_range = 0.2;
+static const int int_extend_range = 11;
+static const double subfit_max_range = 0.3;
 static const double fit_gauss_max_tilt = 0.1;
 static double max_accept_dist = 3.0;
-static const float signcheck_size = 0;
 
 #include <stdarg.h>
 
@@ -77,6 +77,12 @@ static bool corner_find_off_save(vector<Corner> &corners, Corner ref, int x, int
   return false;
 }
 
+int sign(int x) 
+{
+  if (x > 0) return 1;
+  if (x < 0) return -1;
+  return 0;
+}
 
 static bool corner_find_off_save_int(vector<Corner> &corners, Corner ref, int x, int y, Point2f &out, int range)
 {
@@ -93,6 +99,7 @@ static bool corner_find_off_save_int(vector<Corner> &corners, Corner ref, int x,
   int r_l, r_h, r_diff = 1000000000;
   Point2f l, h;
   
+  bool succ1 = false;
   for(int r=1;r<=range;r++)
     if (!corner_find_off_save(corners, ref, x*(1+r), y, h)) {
       r_h = r;
@@ -100,14 +107,16 @@ static bool corner_find_off_save_int(vector<Corner> &corners, Corner ref, int x,
         if (!corner_find_off_save(corners, ref, x*(1-r), y, l)) {
           r_l = r;
           r_diff = r_h+r_l;
+          succ1 = true;
           goto found1;
         }
     }
-  return true;
-  
   found1 :
-  out = l + (h-l)*(1.0/(r_h+r_l))*r_l;
   
+  if (succ1)
+    out = l + (h-l)*(1.0/(r_h+r_l))*r_l;
+  
+  bool succ2 = false;
   for(int r=1;r<=range;r++)
     if (!corner_find_off_save(corners, ref, x, y*(1+r), h)) {
       r_h = r;
@@ -116,17 +125,22 @@ static bool corner_find_off_save_int(vector<Corner> &corners, Corner ref, int x,
           r_l = r;
           if (r_h+r_l > r_diff)
             return false;
-          else
+          else {
+            succ2 = true;
             goto found2;
+          }
         }
     }
-  if (r_diff != 1000000000)
-    return false;
-    
   found2 :
-  out = l + (h-l)*(1.0/(r_h+r_l))*r_l;
   
-  return false;
+  if (succ2) {
+    out = l + (h-l)*(1.0/(r_h+r_l))*r_l;
+    return false;
+  }
+  else if (succ1)
+    return false;
+  
+  return true;
 }
 
 struct Gauss2dError {
@@ -198,8 +212,8 @@ struct Gauss2dDirectError {
 
 
 struct Gauss2dPlaneDirectError {
-  Gauss2dPlaneDirectError(int val, int x, int y, double w, double h, double px, double py, double sw)
-      : val_(val), x_(x), y_(y), w_(w), h_(h), px_(px), py_(py), sw_(sw){}
+  Gauss2dPlaneDirectError(int val, int x, int y, double w, double h, double px, double py)
+      : val_(val), x_(x), y_(y), w_(w), h_(h), px_(px), py_(py){}
 
 /**
  * used function: 
@@ -215,21 +229,21 @@ struct Gauss2dPlaneDirectError {
     T sy2 = T(2.0)*p[4]*p[4];
     x2 = x2*x2;
     y2 = y2*y2;
-    
-    residuals[0] = (T(val_) - (p[5] + p[6]*dx + p[7]*dy + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*T(sw_);
+
+    residuals[0] = (T(val_) - (p[5] + p[6]*dx + p[7]*dy + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))));
     
     return true;
   }
 
   // Factory to hide the construction of the CostFunction object from
   // the client code.
-  static ceres::CostFunction* Create(int val, int x, int y, double w, double h, double px, double py, double sw) {
+  static ceres::CostFunction* Create(int val, int x, int y, double w, double h, double px, double py) {
     return (new ceres::AutoDiffCostFunction<Gauss2dPlaneDirectError, 1, 8>(
-                new Gauss2dPlaneDirectError(val, x, y, w, h, px, py, sw)));
+                new Gauss2dPlaneDirectError(val, x, y, w, h, px, py)));
   }
 
   int x_, y_, val_;
-  double w_, sw_, px_, py_, h_;
+  double w_, px_, py_, h_;
 };
 
 
@@ -575,14 +589,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
   ceres::Problem problem_gauss_plane;
   for(y=area.y;y<area.br().y;y++)
     for(x=area.x;x<area.br().x;x++) {
-      double x2 = x-p.x;
-      double y2 = y-p.y;
-      x2 = x2*x2;
-      y2 = y2*y2;
-      double s2 = sqrt(size.x*size.x+size.y*size.y);
-      s2=s2*s2;
-      double sw = exp(-x2/s2-y2/s2);
-      ceres::CostFunction* cost_function = Gauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, 1.0);
+      ceres::CostFunction* cost_function = Gauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y);
       problem_gauss_plane.AddResidualBlock(cost_function, NULL, params);
     }
     
@@ -657,27 +664,24 @@ void addcorners(Rect_<float> area, Point2f c)
   area.height = max(c.y-area.y, area.height);
 }
 
-typedef unordered_map<uint64_t, bool> BoolMap;
-
 void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours)
 {  
   int counter = 0;
   sort(corners.begin(), corners.end(), corner_cmp);
   
   IntCMap corners_interpolated;
-  BoolMap signs;
   vector<Mat> blurimgs;
   
-  vector<Corner> corners_potential;
-  
   Mat paint = Mat::zeros(img.size(), CV_8U);
+  paint = 127;
   
 #pragma omp parallel for schedule(dynamic)
   for(int i=0;i<corners.size();i++) {
 #pragma omp critical (_print_)
-    printprogress(i, corners.size(), counter, " %d subs", corners_potential.size());
-    for(int sy=-int_search_range;sy<=int_search_range;sy++)
-      for(int sx=-int_search_range;sx<=int_search_range;sx++) {
+    printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
+    int sy = 0;
+    for(int sy=-int_extend_range;sy<=int_extend_range;sy++)
+      for(int sx=-int_extend_range;sx<=int_extend_range;sx++) {
         vector<Point2f> ipoints(4);
         Corner c = corners[i];
         int size;
@@ -754,6 +758,11 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             Point2f refine_p = ipoints[0] 
                                 + (x+in_c_offset)*(ipoints[1]-ipoints[0])*0.2
                                 + (y+in_c_offset)*(ipoints[3]-ipoints[0])*0.2;
+                                
+            if (refine_p.x - maxlen*0.1 <= 0 || refine_p.y - maxlen*0.1 <= 0)
+              continue;
+            if (refine_p.x + maxlen*0.1 >= img.size().width || refine_p.y + maxlen*0.1 >= img.size().height)
+              continue;
             
             double params[8];
             double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, &paint, params);
@@ -764,31 +773,13 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             Corner c_o(refine_p, Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), 0);
     #pragma omp critical
             {
-              if (maxlen <= signcheck_size)
-                signs[id_to_key(c_o.id)] = (params[2] > params[5]);
-              corners_potential.push_back(c_o); 
+              corners_out.push_back(c_o); 
             }
           }
 
       }
   }
   printf("\n");
-  
-  for(int i=0;i<corners_potential.size();i++) {
-    bool signchange = false;
-    BoolMap::iterator it = signs.find(id_to_key(corners_potential[i].id));
-    if (it != signs.end()) {
-      bool sign = it->second;
-      for(int y=corners_potential[i].id.y-2;y<=corners_potential[i].id.y+2;y+=2)
-        for(int x=corners_potential[i].id.x-2;x<=corners_potential[i].id.x+2;x+=2) {
-          it = signs.find(id_to_key(Point2i(x,y)));
-          if (it != signs.end() && (*it).second != sign)
-                signchange = true;
-        }
-    }
-    if (!signchange)
-      corners_out.push_back(corners_potential[i]);
-  }
   
   printf("found %d valid corners                                                  \n", corners_out.size());
 
