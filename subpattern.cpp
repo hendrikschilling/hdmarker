@@ -697,7 +697,7 @@ void addcorners(Rect_<float> area, Point2f c)
 }
 
 
-void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset)
+void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours)
 {  
   int counter = 0;
   sort(corners.begin(), corners.end(), corner_cmp);
@@ -779,6 +779,12 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
         
         for(int y=0;y<5;y++)
           for(int x=0;x<5;x++) {
+            if (ignore_corner_neighbours) {
+              if (x + y == 1)
+                continue;
+              if (x+y == 4)
+                continue;
+            }
             //FIXME use proper (perspective?) center
             Point2f refine_p = ipoints[0] 
                                 + (x+in_c_offset)*(ipoints[1]-ipoints[0])*0.2
@@ -828,7 +834,7 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
   for(int i=2;i<=depth;i++) {
     ca = cb;
     cb.resize(0);
-    hdmarker_subpattern_step(img , ca, cb, 2, 0.0, 5, 0);
+    hdmarker_subpattern_step(img , ca, cb, 2, 0.0, 5, 0, true);
     if (!cb.size()) {
       cb = ca;
       break;
