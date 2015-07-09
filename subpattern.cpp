@@ -20,13 +20,13 @@ static const float subfit_oversampling = 2.0;
 static const int subfit_max_size = 30;
 static const int subfit_min_size = 1;
 static const float min_fit_contrast = -1.0;
-static const float min_fitted_contrast = 3.0; //minimum amplitude of fitted gaussian
-static const float rms_use_limit = 10000000000.0;
-static const float recurse_min_len = 4.0;
+static const float min_fitted_contrast = 2.0; //minimum amplitude of fitted gaussian
+static const float rms_use_limit = 25.0;
+static const float recurse_min_len = 5.0;
 static const int int_search_range = 11;
-static const int int_extend_range = 3;
+static const int int_extend_range = 2;
 static const double subfit_max_range = 0.2;
-static const double fit_gauss_max_tilt = 0.5;
+static const double fit_gauss_max_tilt = 1.5;
 static double max_accept_dist = 3.0;
 
 #include <stdarg.h>
@@ -617,32 +617,25 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
   //minimal possible contrast
   double contrast = abs(params[2]-params[5])*exp(-(0.25/(2.0*params[3]*params[3])+0.25/(2.0*params[4]*params[4])));
   
-  //if (contrast <= min_fitted_contrast)
-    //return FLT_MAX;
+  if (contrast <= min_fitted_contrast)
+    return FLT_MAX;
   if (summary.termination_type != ceres::CONVERGENCE)
     return FLT_MAX;
   if (params[5] <= 0 || params[5] >= 255)
     return FLT_MAX;
   //nonsensical background?
   //spread to large?
-  /*if (abs(params[3]) >= size.x*0.5 || abs(params[4]) >= size.y*0.5)
+  if (abs(params[3]) >= size.x*0.5 || abs(params[4]) >= size.y*0.5)
     return FLT_MAX;
-  if (abs(params[3]) <= size.x*0.05 || abs(params[4]) <= size.y*0.05)
-    return FLT_MAX;
-  if (abs(params[6])*size.x+abs(params[7])*size.y >= contrast*fit_gauss_max_tilt)
+  /*if (abs(params[3]) <= size.x*0.05 || abs(params[4]) <= size.y*0.05)
     return FLT_MAX;*/
-  
-  if (norm(p-Point2f(1520,487)) <= 5.0) {
-    printf("contr %f a %f b %f spread %f/%f\n", contrast, params[2], params[5], params[3], params[4]);
-    printf("contrast %f mul %f\n", contrast, 255.0/(contrast-min_fitted_contrast));
-    printf("rms: %f\n", sqrt(summary.final_cost/problem_gauss.NumResiduals())*255.0/(contrast-min_fitted_contrast));
-  }
-  //return sqrt
+  if (abs(params[6])*size.x+abs(params[7])*size.y >= contrast*fit_gauss_max_tilt)
+    return FLT_MAX;
   
   if (paint)
     draw_gauss2d_plane_direct(*paint, c, p, size, params);
   
-  return sqrt(summary.final_cost/problem_gauss.NumResiduals());
+  return sqrt(summary.final_cost/problem_gauss.NumResiduals())*255.0/contrast;
 }
 
 class Interpolated_Corner {
@@ -697,9 +690,6 @@ int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, IntCM
       printprogress(i, corners.size(), counter, " %d corners", corners.size());
       c = corners[i];
     }
-    
-    if (norm(c.p-Point2f(1520,487)) >= 200)
-      continue;
     
     for(int sy=-int_extend_range;sy<=int_extend_range;sy++)
       for(int sx=-int_extend_range;sx<=int_extend_range;sx++) {
@@ -789,9 +779,6 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
 #pragma omp critical (_print_)
     printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
     int sy = 0;
-    
-        if (norm(corners[i].p-Point2f(1520,487)) >= 200)
-      continue;
     
     for(int sy=-int_search_range;sy<=int_search_range;sy++)
       for(int sx=-int_search_range;sx<=int_search_range;sx++) {
