@@ -7,4 +7,4 @@ Description: library for High Density Marker detection
 Version: 0.1
 Requires: opencv
 Cflags: -I${includedir} 
-Libs: -L${libdir} -lhdmarker
+Libs: -L${libdir} -lhdmarker -lhdmarker_subpattern
