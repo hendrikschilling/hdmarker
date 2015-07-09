@@ -21,13 +21,15 @@ static const int subfit_max_size = 30;
 static const int subfit_min_size = 1;
 static const float min_fit_contrast = -1.0;
 static const float min_fitted_contrast = 2.0; //minimum amplitude of fitted gaussian
+//static const float min_fit_contrast_gradient = 0.05;
 static const float rms_use_limit = 25.0;
-static const float recurse_min_len = 5.0;
+static const float recurse_min_len = 4.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 2;
 static const double subfit_max_range = 0.2;
-static const double fit_gauss_max_tilt = 1.5;
+static const double fit_gauss_max_tilt = 3.0;
 static double max_accept_dist = 3.0;
+static const float max_size_diff = 0.1;
 
 #include <stdarg.h>
 
@@ -144,40 +146,6 @@ static bool corner_find_off_save_int(vector<Corner> &corners, Corner ref, int x,
   return true;
 }
 
-struct Gauss2dError {
-  Gauss2dError(int val, int x, int y, double m, double sw)
-      : val_(val), x_(x), y_(y), m_(m), sw_(sw) {}
-
-/**
- * used function: 
- */
-  template <typename T>
-  bool operator()(const T* const p,
-                  T* residuals) const {
-    T x2 = T(x_) - (T(m_)+sin(p[0])*T(m_*2.0*subfit_max_range));
-    T y2 = T(y_) - (T(m_)+sin(p[1])*T(m_*2.0*subfit_max_range));
-    T sx2 = T(2.0)*p[3]*p[3];
-    T sy2 = T(2.0)*p[4]*p[4];
-    x2 = x2*x2;
-    y2 = y2*y2;
-
-    residuals[0] = (T(val_) - (p[5] + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*T(sw_);
-    
-    return true;
-  }
-
-  // Factory to hide the construction of the CostFunction object from
-  // the client code.
-  static ceres::CostFunction* Create(int val, int x, int y, double m, double sw) {
-    return (new ceres::AutoDiffCostFunction<Gauss2dError, 1, 6>(
-                new Gauss2dError(val, x, y, m, sw)));
-  }
-
-  int x_, y_, val_;
-  double sw_, m_;
-};
-
-
 struct Gauss2dDirectError {
   Gauss2dDirectError(int val, int x, int y, double w, double h, double px, double py, double sw)
       : val_(val), x_(x), y_(y), w_(w), h_(h), px_(px), py_(py), sw_(sw){}
@@ -190,12 +158,11 @@ struct Gauss2dDirectError {
                   T* residuals) const {
     T x2 = T(x_) - (T(px_)+sin(p[0])*T(w_*subfit_max_range));
     T y2 = T(y_) - (T(py_)+sin(p[1])*T(h_*subfit_max_range));
-    T sx2 = T(2.0)*p[3]*p[3];
-    T sy2 = T(2.0)*p[4]*p[4];
+    T s2 = T(2.0)*p[3]*p[3];
     x2 = x2*x2;
     y2 = y2*y2;
     
-    residuals[0] = (T(val_) - (p[5] + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*(T(sw_)+T(0.5));
+    residuals[0] = (T(val_) - (p[4] + (p[2]-p[4])*exp(-(x2/s2+y2/s2))))*(T(sw_)+T(0.5));
     
     return true;
   }
@@ -203,7 +170,7 @@ struct Gauss2dDirectError {
   // Factory to hide the construction of the CostFunction object from
   // the client code.
   static ceres::CostFunction* Create(int val, int x, int y, double w, double h, double px, double py, double sw) {
-    return (new ceres::AutoDiffCostFunction<Gauss2dDirectError, 1, 6>(
+    return (new ceres::AutoDiffCostFunction<Gauss2dDirectError, 1, 5>(
                 new Gauss2dDirectError(val, x, y, w, h, px, py, sw)));
   }
 
@@ -227,11 +194,10 @@ struct Gauss2dPlaneDirectError {
     T dx = T(x_) - T(px_);
     T dy = T(y_) - T(py_);
     T sx2 = T(2.0)*p[3]*p[3];
-    T sy2 = T(2.0)*p[4]*p[4];
     x2 = x2*x2;
     y2 = y2*y2;
 
-    residuals[0] = (T(val_) - (p[5] + p[6]*dx + p[7]*dy + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2))))*(T(sw_)+0.5);
+    residuals[0] = (T(val_) - (p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-(x2/sx2+y2/sx2))))*(T(sw_)+0.5);
     
     return true;
   }
@@ -239,49 +205,13 @@ struct Gauss2dPlaneDirectError {
   // Factory to hide the construction of the CostFunction object from
   // the client code.
   static ceres::CostFunction* Create(int val, int x, int y, double w, double h, double px, double py, double sw) {
-    return (new ceres::AutoDiffCostFunction<Gauss2dPlaneDirectError, 1, 8>(
+    return (new ceres::AutoDiffCostFunction<Gauss2dPlaneDirectError, 1, 7>(
                 new Gauss2dPlaneDirectError(val, x, y, w, h, px, py, sw)));
   }
 
   int x_, y_, val_;
   double w_, px_, py_, h_, sw_;
 };
-
-
-
-struct Gauss2dCenterError {
-  Gauss2dCenterError(int val, int x, int y, double m, double sw)
-      : val_(val), x_(x), y_(y), m_(m), sw_(sw) {}
-
-/**
- * used function: 
- */
-  template <typename T>
-  bool operator()(const T* const p,
-                  T* residuals) const {
-    T x2 = T(x_) - T(m_);
-    T y2 = T(y_) - T(m_);
-    T sx2 = T(2.0)*p[1]*p[1];
-    T sy2 = T(2.0)*p[2]*p[2];
-    x2 = x2*x2;
-    y2 = y2*y2;
-
-    residuals[0] = (T(val_) - (p[3] + (p[0]-p[3])*exp(-(x2/sx2+y2/sy2))))*T(sw_);
-    
-    return true;
-  }
-
-  // Factory to hide the construction of the CostFunction object from
-  // the client code.
-  static ceres::CostFunction* Create(int val, int x, int y, double m, double sw) {
-    return (new ceres::AutoDiffCostFunction<Gauss2dCenterError, 1, 4>(
-                new Gauss2dCenterError(val, x, y, m, sw)));
-  }
-
-  int x_, y_, val_;
-  double sw_, m_;
-};
-
 
 struct Gauss2dDirectCenterError {
   Gauss2dDirectCenterError(int val, int x, int y, double px, double py, double sw)
@@ -295,12 +225,11 @@ struct Gauss2dDirectCenterError {
                   T* residuals) const {
     T x2 = T(x_) - T(px_);
     T y2 = T(y_) - T(py_);
-    T sx2 = T(2.0)*p[1]*p[1];
-    T sy2 = T(2.0)*p[2]*p[2];
+    T s2 = T(2.0)*p[1]*p[1];
     x2 = x2*x2;
     y2 = y2*y2;
 
-    residuals[0] = (T(val_) - (p[3] + (p[0]-p[3])*exp(-(x2/sx2+y2/sy2))))*(T(sw_)+T(0.5));
+    residuals[0] = (T(val_) - (p[2] + (p[0]-p[2])*exp(-(x2/s2+y2/s2))))*(T(sw_)+T(0.5));
     
     return true;
   }
@@ -308,7 +237,7 @@ struct Gauss2dDirectCenterError {
   // Factory to hide the construction of the CostFunction object from
   // the client code.
   static ceres::CostFunction* Create(int val, int x, int y, double px, double py, double sw) {
-    return (new ceres::AutoDiffCostFunction<Gauss2dDirectCenterError, 1, 4>(
+    return (new ceres::AutoDiffCostFunction<Gauss2dDirectCenterError, 1, 3>(
                 new Gauss2dDirectCenterError(val, x, y, px, py, sw)));
   }
 
@@ -319,42 +248,6 @@ struct Gauss2dDirectCenterError {
 template <typename T> inline T clamp(const T& n, const T& lower, const T& upper)
 {
   return std::max<T>(lower, std::min<T>(n, upper));
-}
-
-static void draw_gauss2d(Mat &img, double *p)
-{
-  uint8_t *ptr = img.ptr<uchar>(0);
-  double m = img.size().width * 0.5;
-  
-  for(int y=0;y<img.size().height;y++)
-    for(int x=0;x<img.size().width;x++) {
-      double x2 = x - p[0];
-      double y2 = y - p[1];
-      double sx2 = 2.0*p[3]*p[3];
-      double sy2 = 2.0*p[4]*p[4];
-      x2 = x2*x2;
-      y2 = y2*y2;
-
-      ptr[y*img.size().width+x] = clamp<int>(p[5] + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2)), 0, 255);
-    }
-}
-
-
-static void draw_gauss2d_direct(Mat &img, Point2f c, Point2f res, Point2i size, double *p)
-{
-  uint8_t *ptr = img.ptr<uchar>(0);
-  int w = img.size().width;
-  
-  for(int y=c.y-size.y/2;y<=c.y+size.y/2;y++)
-    for(int x=c.x-size.x/2;x<=c.x+size.x/2;x++) {
-      double x2 = x - res.x;
-      double y2 = y - res.y;
-      double sx2 = 2.0*p[3]*p[3];
-      double sy2 = 2.0*p[4]*p[4];
-      x2 = x2*x2;
-      y2 = y2*y2;
-      ptr[y*w+x] = clamp<int>(p[5] + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2)), 0, 255);
-    }
 }
 
 
@@ -369,12 +262,11 @@ static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i 
       double y2 = y - res.y;
       double dx = x - c.x;
       double dy = y - c.y;
-      double sx2 = 2.0*p[3]*p[3];
-      double sy2 = 2.0*p[4]*p[4];
+      double s2 = 2.0*p[3]*p[3];
       x2 = x2*x2;
       y2 = y2*y2;
       
-      ptr[y*w+x] = clamp<int>(p[5] + p[6]*dx + p[7]*dy + (p[2]-p[5])*exp(-(x2/sx2+y2/sy2)), 0, 255);
+      ptr[y*w+x] = clamp<int>(p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-(x2/s2+y2/s2)), 0, 255);
     }
 }
 
@@ -382,119 +274,7 @@ static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i 
  * Fit 2d gaussian to image, 5 parameter: \f$x_0\f$, \f$y_0\f$, amplitude, spread, background
  * disregards a border of \f$\lfloor \mathit{size}/5 \rfloor\f$ pixels
  */
-static double fit_gauss(Mat &img, double *params)
-{
-  int size = img.size().width;
-  assert(img.size().height == size);
-  int b = size/5;
-  uint8_t *ptr = img.ptr<uchar>(0);
-  
-  assert(img.depth() == CV_8U);
-  assert(img.channels() == 1);
-  
-  double params_cpy[6];
-  
-  //x,y
-  params[0] = 0.0;
-  params[1] = 0.0;
-  
-  int sum = 0;
-  int x, y = b;
-  for(x=b;x<size-b-1;x++)
-    sum += ptr[y*size+x];
-  y = size-b-1;
-  for(x=b+1;x<size-b;x++)
-    sum += ptr[y*size+x];
-  x = b;
-  for(y=b+1;y<size-b;y++)
-    sum += ptr[y*size+x];
-  x = size-b-1;
-  for(y=b;y<size-b-1;y++)
-    sum += ptr[y*size+x];
-  
-  //background
-  params[5] = sum / (4*(size-2*b-1));
-  
-  //amplitude
-  params[2] = ptr[size/2*(size+1)];
-  
-  if (abs(params[2]-params[5]) < min_fit_contrast)
-    return FLT_MAX;
-  
-  //spread
-  params[3] = size*0.2;
-  params[4] = size*0.2;
-  
-  for(int i=0;i<6;i++)
-    params_cpy[i] = params[i];
-
-  
-  ceres::Problem problem_gauss_center;
-  for(y=0;y<size-0;y++)
-    for(x=0;x<size-0;x++) {
-      double x2 = x-size*0.5;
-      double y2 = y-size*0.5;
-      x2 = x2*x2;
-      y2 = y2*y2;
-      double s2 = size*0.5;
-      s2=s2*s2;
-      double sw = exp(-x2/s2-y2/s2);
-      ceres::CostFunction* cost_function = Gauss2dCenterError::Create(ptr[y*size+x], x, y, size*0.5, sw);
-      problem_gauss_center.AddResidualBlock(cost_function, NULL, params+2);
-    }
-  
-  ceres::Solver::Options options;
-  options.max_num_iterations = 200;
-  options.linear_solver_type = ceres::DENSE_QR;
-  
-  ceres::Solver::Summary summary;
-  ceres::Solve(options, &problem_gauss_center, &summary);
-  
-  ceres::Problem problem_gauss;
-  for(y=0;y<size-0;y++)
-    for(x=0;x<size-0;x++) {
-      double x2 = x-size*0.5;
-      double y2 = y-size*0.5;
-      x2 = x2*x2;
-      y2 = y2*y2;
-      double s2 = size*0.25;
-      s2=s2*s2;
-      double sw = exp(-x2/s2-y2/s2);
-      ceres::CostFunction* cost_function = Gauss2dError::Create(ptr[y*size+x], x, y, size*0.5, sw);
-      problem_gauss.AddResidualBlock(cost_function, NULL, params);
-    }
-  
-  ceres::Solver::Summary summary2;
-  ceres::Solve(options, &problem_gauss, &summary2);
-  
-  params[0] = size*0.5+sin(params[0])*(size*subfit_max_range);
-  params[1] = size*0.5+sin(params[1])*(size*subfit_max_range);
-  
-  if (abs(params[2]-params[5]) <= min_fitted_contrast)
-    return FLT_MAX;
-  if (summary.termination_type != ceres::CONVERGENCE)
-    return FLT_MAX;
-  if (params[5] <= 0 || params[5] >= 255)
-    return FLT_MAX;
-  //nonsensical background?
-  //spread to large?
-  if (abs(params[3]) >= size*0.5 || abs(params[4]) >= size*0.5)
-    return FLT_MAX;
-  if (abs(params[3]) <= size*0.05 || abs(params[4]) <= size*0.05)
-    return FLT_MAX;
-  
-  //rms scaled with amplitude (small amplitude needs lower rms!
-  //printf("scale %f a %f b %f spread %f/%f ", 255.0/abs(params[2]-params[5]), params[2], params[5], params[3], params[4]);
-  double contrast = abs(params[2]-params[5]);
-  return sqrt(summary2.final_cost/problem_gauss.NumResiduals())*255.0/contrast + rms_use_limit*min_fitted_contrast/contrast;
-}
-
-
-/**
- * Fit 2d gaussian to image, 5 parameter: \f$x_0\f$, \f$y_0\f$, amplitude, spread, background
- * disregards a border of \f$\lfloor \mathit{size}/5 \rfloor\f$ pixels
- */
-static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = NULL, double *params = NULL)
+static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *params = NULL)
 {
   int w = img.size().width;
   Point2i hw = size*0.5;
@@ -504,7 +284,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
   assert(img.depth() == CV_8U);
   assert(img.channels() == 1);
   
-  double params_static[8];
+  double params_static[7];
   
   if (!params)
     params = params_static;
@@ -530,22 +310,21 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
     sum += ptr[y*w+x];
   
   //background
-  params[5] = sum / (2*(size.x-b.x) + 2*(size.y-b.y));
+  params[4] = sum / (2*(size.x-b.x) + 2*(size.y-b.y));
   
   //amplitude
   //TODO use (small area?)
   params[2] = ptr[int(p.y)*w + int(p.x)];
   
-  if (abs(params[2]-params[5]) < min_fit_contrast)
+  if (abs(params[2]-params[4]) < min_fit_contrast)
     return FLT_MAX;
   
   //spread
   params[3] = size.x*0.1;
-  params[4] = size.y*0.1;
   
   //tilt
+  params[5] = 0.0;
   params[6] = 0.0;
-  params[7] = 0.0;
   
   ceres::Problem problem_gauss_center;
   for(y=area.y-1;y<area.br().y+1;y++)
@@ -556,7 +335,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
       y2 = y2*y2;
       double s2 = (size.x*size.x+size.y*size.y);
       double sw = exp(-x2/s2-y2/s2);
-      ceres::CostFunction* cost_function = Gauss2dDirectCenterError::Create(ptr[y*w+x], x, y, p.y, p.y, sw);
+      ceres::CostFunction* cost_function = Gauss2dDirectCenterError::Create(ptr[y*w+x], x, y, p.x, p.y, sw);
       problem_gauss_center.AddResidualBlock(cost_function, NULL, params+2);
     }
   
@@ -573,7 +352,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
   
   //std::cout << summary.FullReport() << "\n";
   
-  ceres::Problem problem_gauss;
+  /*ceres::Problem problem_gauss;
   for(y=area.y-1;y<area.br().y+1;y++)
     for(x=area.x-1;x<area.br().x+1;x++) {
       double x2 = x-p.x;
@@ -586,7 +365,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
       problem_gauss.AddResidualBlock(cost_function, NULL, params);
     }
     
-  ceres::Solve(options, &problem_gauss, &summary);
+  ceres::Solve(options, &problem_gauss, &summary);*/
   
   ceres::Problem problem_gauss_plane;
   for(y=area.y-1;y<area.br().y+1;y++)
@@ -596,7 +375,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
       x2 = x2*x2;
       y2 = y2*y2;
       double s2 = (size.x*size.x+size.y*size.y);
-      double sw = exp(-x2/s2-y2/s2);
+      double sw = exp(-x2/s2-y2/s2)*0.25;
       ceres::CostFunction* cost_function = Gauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw*0.5);
       problem_gauss_plane.AddResidualBlock(cost_function, NULL, params);
     }
@@ -615,38 +394,39 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, Mat *paint = 
   //printf(" -> %fx%f rms %f\n", p.x, p.y, sqrt(summary2.final_cost/problem_gauss.NumResiduals()));
   
   //minimal possible contrast
-  double contrast = abs(params[2]-params[5])*exp(-(0.25/(2.0*params[3]*params[3])+0.25/(2.0*params[4]*params[4])));
+  double contrast = abs(params[2]-params[4])*exp(-(0.25/(2.0*params[3]*params[3])+0.25/(2.0*params[3]*params[3])));
   
   if (contrast <= min_fitted_contrast)
     return FLT_MAX;
-  if (summary.termination_type != ceres::CONVERGENCE)
-    return FLT_MAX;
-  if (params[5] <= 0 || params[5] >= 255)
+  //if (contrast*params[3] <= min_fit_contrast_gradient*(size.x+size.y))
+    //return FLT_MAX;
+  //if (summary.termination_type != ceres::CONVERGENCE)
+    //return FLT_MAX;
+  if (params[4] <= 0 || params[4] >= 255)
     return FLT_MAX;
   //nonsensical background?
   //spread to large?
-  if (abs(params[3]) >= size.x*0.5 || abs(params[4]) >= size.y*0.5)
+  if (abs(params[3]) >= size.x*0.25)
     return FLT_MAX;
-  /*if (abs(params[3]) <= size.x*0.05 || abs(params[4]) <= size.y*0.05)
-    return FLT_MAX;*/
-  if (abs(params[6])*size.x+abs(params[7])*size.y >= contrast*fit_gauss_max_tilt)
+  if (abs(params[5])*size.x+abs(params[6])*size.y >= contrast*fit_gauss_max_tilt)
     return FLT_MAX;
   
-  if (paint)
-    draw_gauss2d_plane_direct(*paint, c, p, size, params);
-  
-  return sqrt(summary.final_cost/problem_gauss.NumResiduals())*255.0/contrast;
+  return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast;
 }
 
 class Interpolated_Corner {
 public:
   Point2i id;
   Point2f p;
+  float size;
   bool used_as_start_corner = false;
   
   Interpolated_Corner() {};
   Interpolated_Corner(Point2i id_, Point2f p_, bool used)
     : id(id_), p(p_), used_as_start_corner(used) {};
+    
+  Interpolated_Corner(Corner c)
+    : id(c.id), p(c.p), size(c.size) {};
 };
 
 uint64_t id_to_key(Point2i id)
@@ -668,6 +448,15 @@ void addcorners(Rect_<float> area, Point2f c)
   area.height = max(c.y-area.y, area.height);
 }
 
+bool is_diff_larger(float a, float b, float th)
+{
+  if (max(a/b,b/a) >= 1.0 +th) {
+    return true;
+  }
+  else
+    return false;
+}
+
 int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, IntCMap &blacklist, int idx_step, Mat *paint = NULL)
 {
   int counter = 0;
@@ -678,7 +467,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, IntCM
   
   for(int i=0;i<corners.size();i++) {
     Corner c = corners[i];
-    Interpolated_Corner c_i(c.id, c.p, false);
+    Interpolated_Corner c_i(c);
     corners_map[id_to_key(corners[i].id)] = c_i;
   }
   
@@ -690,6 +479,10 @@ int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, IntCM
       printprogress(i, corners.size(), counter, " %d corners", corners.size());
       c = corners[i];
     }
+    
+    /*if (idx_step == 2)
+      if (norm(c.p-Point2f(4000,1000)) >= 500)
+        continue;*/
     
     for(int sy=-int_extend_range;sy<=int_extend_range;sy++)
       for(int sx=-int_extend_range;sx<=int_extend_range;sx++) {
@@ -708,7 +501,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, IntCM
             Point2i search_id = Point2i(c.id)+Point2i(sx,sy)*idx_step;
             IntCMap::iterator it = corners_map.find(id_to_key(search_id));
             
-            if (it == corners_map.end())
+            if (it == corners_map.end() || is_diff_larger(it->second.size, c.size, max_size_diff))
               do_continue = true;
             else
               second = it->second.p;
@@ -726,25 +519,33 @@ int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, IntCM
           //abort();
         
         if (refine_p.x - maxlen*0.1 <= 0 || refine_p.y - maxlen*0.1 <= 0
-            || refine_p.x + maxlen*0.1 >= img.size().width || refine_p.y + maxlen*0.1 >= img.size().height) {
+            || refine_p.x + maxlen*0.1 >= img.size().width || refine_p.y + maxlen*0.1 >= img.size().height
+            || is_diff_larger(maxlen*0.2, c.size, max_size_diff)) {
             Interpolated_Corner c_i(extr_id, refine_p, false);
 #pragma omp critical
             blacklist[id_to_key(c_i.id)] = c_i;
           continue;
         }
         
-        double params[8];
-        double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, paint, params);
+        double params[7];
+        Point2f p_cp = refine_p;
+        double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, params);
         
-        if (rms >= rms_use_limit) {
+        if (rms >= rms_use_limit*min(maxlen*0.2,10.0)) {
             Interpolated_Corner c_i(extr_id, refine_p, false);
 #pragma omp critical
             blacklist[id_to_key(c_i.id)] = c_i;
           continue;
         }
+        
+#pragma omp critical (_paint_)
+        if (paint)
+          draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(maxlen*0.2, maxlen*0.2), params);
         
         Corner c_o(refine_p, extr_id, 0);
+        c_o.size = maxlen*0.2;
         Interpolated_Corner c_i(extr_id, refine_p, false);
+        c_i.size = maxlen*0.2;
 #pragma omp critical
         {
           added++;
@@ -776,9 +577,18 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   
 #pragma omp parallel for schedule(dynamic)
   for(int i=0;i<corners.size();i++) {
+    int tmpsize;
+#pragma omp critical
+    tmpsize = corners_out.size();
+    if (i % 500 == 0 && tmpsize)
+      imwrite("fitted.tif", paint);
 #pragma omp critical (_print_)
     printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
     int sy = 0;
+    
+    /*if (in_idx_step == 2)
+      if (norm(corners[i].p-Point2f(4000,1000)) >= 500)
+        continue;*/
     
     for(int sy=-int_search_range;sy<=int_search_range;sy++)
       for(int sx=-int_search_range;sx<=int_search_range;sx++) {
@@ -842,8 +652,8 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
         //if (maxlen >= 50 && maxlen <= 100)
           //abort();
         
-        //if (maxlen < 5*recurse_min_len)
-          //continue;
+        if (maxlen < 5*recurse_min_len)
+          continue;
         
         //FIXME need to use scale-space for perspective transform?
         //size = std::max<int>(std::min<int>(maxlen*subfit_oversampling/5, subfit_max_size), subfit_min_size);
@@ -876,16 +686,22 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
               }
             
             double params[8];
-            double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, &paint, params);
+            Point2f p_cp = refine_p;
+            double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, params);
             
-            if (rms >= rms_use_limit){
+            if (rms >= rms_use_limit*min(maxlen*0.2,10.0)){
                 Interpolated_Corner c_i(target_id, Point2f(0,0), false);
     #pragma omp critical
                 blacklist[id_to_key(c_i.id)] = c_i;
                 continue;
               }
+              
+#pragma omp critical (_paint_)
+          //if (paint)
+            draw_gauss2d_plane_direct(paint, p_cp, refine_p, Point2f(maxlen*0.2, maxlen*0.2), params);
             
             Corner c_o(refine_p, Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), 0);
+            c_o.size = maxlen*0.2;
     #pragma omp critical
             {
               corners_out.push_back(c_o); 
@@ -896,14 +712,19 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   }
   printf("\n");
   
-  printf("found %d valid corners                                                  \n", corners_out.size());
+  printf("found %d intitial corners                                                  \n", corners_out.size());
   
-  int found = 1;
-  while (found) {
+  if (corners_out.size()) {
     imwrite("fitted.tif", paint);
-    found = hdmarker_subpattern_checkneighbours(img, corners_out, blacklist, in_idx_step, &paint);
+      
+    int found = 1;
+    while (found) {
+      found = hdmarker_subpattern_checkneighbours(img, corners_out, blacklist, in_idx_step, &paint);
+    }
+    
+    printf("found %d corners with extra search                                                 \n", corners_out.size());
+    imwrite("fitted.tif", paint);
   }
-  
 }
 
 void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size)

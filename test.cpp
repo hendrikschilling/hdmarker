@@ -20,7 +20,7 @@ const int grid_height = 1;
 
 const bool use_rgb = false;
 
-const bool demosaic = false;
+const bool demosaic = true;
 
 void usage(const char *c)
 {
@@ -280,9 +280,15 @@ int main(int argc, char* argv[])
   vector<Corner> corners_f4;
   check_calibration(corners_sub3, img.size().width, img.size().height, img, corners_f4);*/
   
+  /*Mat blur;
+  GaussianBlur(gray, blur, Size(0, 0), 1.5);
+  addWeighted(gray, 3.0, blur, -2.0, 0, gray);
+  
+  imwrite("sharpened.tif", gray);*/
+  
   vector<Corner> corners_sub; 
   double msize = 1.0;
-  hdmarker_detect_subpattern(gray, corners_f, corners_sub, 2, &msize);
+  hdmarker_detect_subpattern(gray, corners_f, corners_sub, 3, &msize);
   
   vector<Corner> corners_f2;
   check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f2);
