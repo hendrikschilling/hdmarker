@@ -122,9 +122,12 @@ void calibrate_channel(vector<vector<Point2f> > &img_points, vector<vector<Point
   Mat paint;
   
   distCoeffs = Mat::zeros(1, 8, CV_64F);
-  rms = calibrateCamera(world_points, img_points, Size(w, h), cameraMatrix, distCoeffs, rvecs, tvecs, CV_CALIB_RATIONAL_MODEL);
+  //use CV_CALIB_ZERO_TANGENT_DIST or we get problems when using single image!
+  rms = calibrateCamera(world_points, img_points, Size(w, h), cameraMatrix, distCoeffs, rvecs, tvecs, CV_CALIB_ZERO_TANGENT_DIST | CV_CALIB_RATIONAL_MODEL);
   printf("rms %f with full distortion correction\n", rms);
     
+  cout << distCoeffs << endl;
+  
   projectPoints(world_points[0], rvecs[0], tvecs[0], cameraMatrix, distCoeffs, projected);
   if (img.channels() == 1)
     cvtColor(img, paint, CV_GRAY2BGR);
@@ -139,7 +142,7 @@ void calibrate_channel(vector<vector<Point2f> > &img_points, vector<vector<Point
     line(paint, c, c+10*d, Scalar(0,0,255));*/
     
     Point2f c = img_points[0][i];
-    Point2f d = projected[i] - img_points[0][i];
+    Point2f d = img_points[0][i]-projected[i];
     line(paint, c-Point2f(2,0), c+Point2f(2,0), Scalar(0,255,0));
     line(paint, c-Point2f(0,2), c+Point2f(0,2), Scalar(0,255,0));
     line(paint, c, c+10*d, Scalar(0,0,255));
