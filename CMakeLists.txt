@@ -48,7 +48,7 @@ target_link_libraries(hdmarker_test hdmarker hdmarker_subpattern)
 
 configure_file(hdmarker.pc.in hdmarker.pc @ONLY)
 
-install(TARGETS hdmarker.pc DESTINATION lib/pkgconfig)
+install(FILES hdmarker.pc DESTINATION lib/pkgconfig)
 install(FILES hdmarker.hpp subpattern.hpp gridstore.hpp DESTINATION include/hdmarker)
 install(TARGETS hdmarker_test hdmarker_generate hdmarker hdmarker_subpattern
             RUNTIME DESTINATION bin
