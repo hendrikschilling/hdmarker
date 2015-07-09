@@ -20,7 +20,7 @@ const int grid_height = 1;
 
 const bool use_rgb = false;
 
-const bool demosaic = true;
+const bool demosaic = false;
 
 void usage(const char *c)
 {
