@@ -1217,10 +1217,15 @@ void Marker_Corner::cornerSubPixCPMask( InputArray _image, Point2f &p,
 
 void Corner::paint(Mat &img)
 {
-  Size s;
-  char buf[64];
   circle(img, p, 1, CV_RGB(0,0,0), 2);
   circle(img, p, 1, CV_RGB(255,255,255));
+}
+
+
+void Corner::paint_text(Mat &img)
+{
+  Size s;
+  char buf[64];
   sprintf(buf, "%d/%d", id.x, id.y);
   putText(img, buf, p, FONT_HERSHEY_PLAIN, 0.7, CV_RGB(0,0,0), 2);
   putText(img, buf, p, FONT_HERSHEY_PLAIN, 0.7, CV_RGB(127,255,127), 1);

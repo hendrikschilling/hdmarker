@@ -92,6 +92,7 @@ public :
   }
   
   void paint(cv::Mat &img);
+  void paint_text(cv::Mat &paint);
 };
 
 class Marker {
@@ -117,7 +118,7 @@ class Marker {
     void filterPoints(Gridstore *candidates, float scale);
     void filter(Gridstore *candidates, std::vector<Marker> &markers, float scale);
     void neighbours_inc(Gridstore *candidates, float scale);
-    void neighbour_check(Marker *n,  Gridstore *candidates, float scale) ;
+    void neighbour_check(Marker *n,  Gridstore *candidates, float scale);
     void paint(cv::Mat &paint);
     Marker operator=(Marker m);
     
