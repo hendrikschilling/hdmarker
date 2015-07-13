@@ -31,6 +31,8 @@ static const double fit_gauss_max_tilt = 3.0;
 static double max_accept_dist = 3.0;
 static const float max_size_diff = 0.1;
 
+static int safety_border = 2;
+
 #include <stdarg.h>
 
 static void printprogress(int curr, int max, int &last, const char *fmt = NULL, ...)
@@ -250,14 +252,23 @@ template <typename T> inline T clamp(const T& n, const T& lower, const T& upper)
   return std::max<T>(lower, std::min<T>(n, upper));
 }
 
+static bool p_area_in_img_border(Mat &img, Point2f p, float extend)
+{
+  if (p.x - extend <= safety_border 
+   || p.y - extend <= safety_border
+   || p.x + extend >= img.size().width-safety_border-1
+   || p.y + extend >= img.size().height-safety_border-1)
+    return false;
+  return true;
+}
 
 static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i size, double *p)
 {
   uint8_t *ptr = img.ptr<uchar>(0);
   int w = img.size().width;
   
-  for(int y=c.y-size.y/2;y<=c.y+size.y/2;y++)
-    for(int x=c.x-size.x/2;x<=c.x+size.x/2;x++) {
+  for(int y=c.y-size.y/2;y<c.y+size.y/2;y++)
+    for(int x=c.x-size.x/2;x<c.x+size.x/2;x++) {
       double x2 = x - res.x;
       double y2 = y - res.y;
       double dx = x - c.x;
@@ -518,9 +529,8 @@ int hdmarker_subpattern_checkneighbours(Mat &img, vector<Corner> &corners, IntCM
         //if (idx_step == 2 && maxlen >= 40)
           //abort();
         
-        if (refine_p.x - maxlen*0.1 <= 0 || refine_p.y - maxlen*0.1 <= 0
-            || refine_p.x + maxlen*0.1 >= img.size().width || refine_p.y + maxlen*0.1 >= img.size().height
-            || is_diff_larger(maxlen*0.2, c.size, max_size_diff)) {
+        if (!p_area_in_img_border(img, refine_p, maxlen*0.1)
+          || is_diff_larger(maxlen*0.2, c.size, max_size_diff)) {
             Interpolated_Corner c_i(extr_id, refine_p, false);
 #pragma omp critical
             blacklist[id_to_key(c_i.id)] = c_i;
@@ -677,8 +687,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
                                 + (x+in_c_offset)*(ipoints[1]-ipoints[0])*0.2
                                 + (y+in_c_offset)*(ipoints[3]-ipoints[0])*0.2;
                                 
-            if (refine_p.x - maxlen*0.1 <= 0 || refine_p.y - maxlen*0.1 <= 0
-              || refine_p.x + maxlen*0.1 >= img.size().width || refine_p.y + maxlen*0.1 >= img.size().height) {
+            if (!p_area_in_img_border(img, refine_p, maxlen*0.1)) {
                 Interpolated_Corner c_i(target_id, Point2f(0,0), false);
     #pragma omp critical
                 blacklist[id_to_key(c_i.id)] = c_i;
@@ -745,7 +754,7 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
     ca = cb;
     cb.resize(0);
     hdmarker_subpattern_step(img , ca, cb, 2, 0.0, 5, 0, true);
-    if (!cb.size()) {
+    if (cb.size() <= ca.size()) {
       cb = ca;
       break;
     }
