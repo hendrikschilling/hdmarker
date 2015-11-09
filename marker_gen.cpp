@@ -10,8 +10,6 @@
 #include <string.h>
 #include <time.h>
 
-#include <tclap/CmdLine.h>
-
 using namespace cv;
 using namespace std;
 

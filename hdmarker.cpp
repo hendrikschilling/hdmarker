@@ -3489,8 +3489,8 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
   corners2.resize(corners.size());
 #pragma omp parallel for
   for (uint32_t ci=0;ci<corners.size();ci++) {
-    if (ci%500 == 0)
-      cout << ci << "estimated of" << corners.size() << " found " << markers.size() << "markers " <<endl;//<< "                  \r" << flush;
+   // if (ci%500 == 0)
+     // cout << ci << "estimated of" << corners.size() << " found " << markers.size() << "markers " <<endl;//<< "                  \r" << flush;
     int mask = 7;
     //FIXME
     for(uint32_t i=0;i<markers.size() && mask;i++) {
@@ -3544,8 +3544,8 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
   //markers.resize(0);
 #pragma omp parallel for schedule(dynamic)
   for (uint32_t i=0;i<candidates.size();i++) {
-    if (i%500 == 0)
-      cout << i << "/" << candidates.size() << " found " << markers.size() << "markers, scale " << scale << endl;//"                  \r" << flush;
+    //if (i%500 == 0)
+      //cout << i << "/" << candidates.size() << " found " << markers.size() << "markers, scale " << scale << endl;//"                  \r" << flush;
     detect_marker((Marker_Corner*)candidates[i], checker, candidates, markers, imgs[scale_idx], small_hc_sb, scale);
   }
   //cout << i << "/" << candidates.size() << " found " << markers.size() << "markers, scale " << scale << endl;
@@ -4108,7 +4108,7 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
       microbench_measure_output("norm and checker");
       
       Marker::detect_scale((*scales_border), norms, checkers, markers_raw, s, effort);
-      cout << " count " << markers_raw.size() << " scale " << s << endl; 
+      //cout << " count " << markers_raw.size() << " scale " << s << endl; 
       
 #ifdef PAINT_CANDIDATE_CORNERS
       cvtColor(img, paint, COLOR_GRAY2BGR);
