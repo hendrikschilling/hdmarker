@@ -50,15 +50,14 @@ foreach(LIB ${HDMARKER_PKG_LIB})
 endforeach()
 
 #put headers in right place
-list(APPEND HDMARKER_PROJECT_INCLUDE_DIRS ${CMAKE_CURRENT_BINARY_DIR}/include)
 list(APPEND HDMARKER_PROJECT_HEADERS hdmarker.hpp subpattern.hpp gridstore.hpp)
 foreach(header ${HDMARKER_PROJECT_HEADERS})
   get_filename_component(_FILE ${header} NAME)
   configure_file(${header} "include/hdmarker/${_FILE}" COPYONLY)
 endforeach()
 
-include_directories(${HDMARKER_DEPENDS_INC} ${HDMARKER_PROJECT_INCLUDE_DIRS})
-link_directories(${HDMARKER_DEPENDS_LINK} ${HDMARKER_PROJECT_LIBRARY_DIRS})
+include_directories(${HDMARKER_DEPENDS_INC})
+link_directories(${HDMARKER_DEPENDS_LINK})
 
 add_library(hdmarker SHARED hdmarker.cpp gridstore.cpp timebench.cpp subpattern.cpp)
 add_library(hdmarker_subpattern SHARED subpattern.cpp)
@@ -90,48 +89,66 @@ install(TARGETS hdmarker_test hdmarker_generate hdmarker hdmarker_subpattern
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
 include(CMakePackageConfigListHelpers)
 
-
 #############################
-set(CMAKECONFIG_CMAKE_DIR ${CMAKE_CURRENT_BINARY_DIR})
-
+# local global
+#############################
 set(CMAKECONFIG_PKG ${${P_N_U}_PKG})
 set(CMAKECONFIG_PKG_INC ${${P_N_U}_PKG_INC})
 set(CMAKECONFIG_PKG_LINK ${${P_N_U}_PKG_LINK})
 set(CMAKECONFIG_PKG_LIB ${${P_N_U}_PKG_LIB})
 
-set(CMAKECONFIG_INC ${${P_N_U}_PROJECT_INCLUDE_DIRS})
-set(CMAKECONFIG_LINK ${${P_N_U}_PROJECT_LIBRARY_DIRS})
+set(CMAKECONFIG_INC "include")
 set(CMAKECONFIG_LIB ${${P_N_U}_PROJECT_LIBRARIES})
+
+
+#############################
+# export local
+#############################
+set(CMAKECONFIG_CMAKE_DIR ${CMAKE_CURRENT_BINARY_DIR})
+
+set(CMAKECONFIG_LINK)
 
 set(INSTALL_PREFIX_BACKUP ${CMAKE_INSTALL_PREFIX})
 set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR})
-
 configure_package_config_file(cmake/projectConfig.cmake.in
                               "${CMAKECONFIG_CMAKE_DIR}/${PROJECT_NAME}Config.cmake"
                               INSTALL_DESTINATION "${CMAKECONFIG_CMAKE_DIR}"
                               PATH_VARS CMAKECONFIG_PKG CMAKECONFIG_PKG_INC CMAKECONFIG_PKG_LINK CMAKECONFIG_PKG_LIB CMAKECONFIG_INC CMAKECONFIG_LINK CMAKECONFIG_LIB)
-                              
 set(CMAKE_INSTALL_PREFIX ${INSTALL_PREFIX_BACKUP})
-#############################
 
-# for the installed package
-set(${P_N_U}_INSTALL_INCLUDE_DIR "include" "include/hdmarker")
-set(${P_N_U}_INSTALL_LIBRARY_DIR "lib")
-set(${P_N_U}_INSTALL_LIBRARIES ${${P_N_U}_LINK_LIBRARIES})
-set(${P_N_U}_INSTALL_CMAKE_DIR "lib/cmake/clif")
+
+#############################
+# make install export
+#############################
+set(CMAKECONFIG_CMAKE_DIR "lib/cmake/${PROJECT_NAME}")
+
+set(CMAKECONFIG_LINK "lib")
+
 configure_package_config_file(cmake/projectConfig.cmake.in
                               "config/${PROJECT_NAME}Config.cmake"
-                              INSTALL_DESTINATION ${${P_N_U}_INSTALL_CMAKE_DIR}
-                              PATH_VARS ${P_N_U}_INSTALL_INCLUDE_DIR ${P_N_U}_INSTALL_LIBRARY_DIR ${P_N_U}_INSTALL_LIBRARIES ${P_N_U}_INSTALL_CMAKE_DIR)
+                              INSTALL_DESTINATION "${CMAKECONFIG_CMAKE_DIR}"
+                              PATH_VARS CMAKECONFIG_PKG CMAKECONFIG_PKG_INC CMAKECONFIG_PKG_LINK CMAKECONFIG_PKG_LIB CMAKECONFIG_INC CMAKECONFIG_LINK CMAKECONFIG_LIB)
+
+
+#################################
+
+# for the installed package
+#set(${P_N_U}_INSTALL_INCLUDE_DIR "include" "include/hdmarker")
+#set(${P_N_U}_INSTALL_LIBRARY_DIR "lib")
+#set(${P_N_U}_INSTALL_LIBRARIES ${${P_N_U}_LINK_LIBRARIES})
+#set(${P_N_U}_INSTALL_CMAKE_DIR "lib/cmake/clif")
+#configure_package_config_file(cmake/projectConfig.cmake.in
+#                              "config/${PROJECT_NAME}Config.cmake"
+#                              INSTALL_DESTINATION ${${P_N_U}_INSTALL_CMAKE_DIR}
+#                              PATH_VARS ${P_N_U}_INSTALL_INCLUDE_DIR ${P_N_U}_INSTALL_LIBRARY_DIR ${P_N_U}_INSTALL_LIBRARIES ${P_N_U}_INSTALL_CMAKE_DIR)
 
 # Install the clifConfig.cmake and clifConfigVersion.cmake
 install(FILES
   "${PROJECT_BINARY_DIR}/config/${PROJECT_NAME}Config.cmake"
-  "${PROJECT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-  DESTINATION ${${P_N_U}_INSTALL_CMAKE_DIR})
+  DESTINATION ${CMAKECONFIG_CMAKE_DIR})
 
 #export targets for installation
-install(EXPORT ${PROJECT_NAME} DESTINATION ${${P_N_U}_INSTALL_CMAKE_DIR})
+install(EXPORT ${PROJECT_NAME} DESTINATION ${CMAKECONFIG_CMAKE_DIR})
 install(FILES ${${P_N_U}_FULLPATH_HEADERS} DESTINATION include/${PROJECT_NAME} )
 
 #local export into binary dir (may be used with cmake .. -DCMAKE_PREFIX_PATH=<...> or with cmake-gui)

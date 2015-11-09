@@ -1,0 +1,36 @@
+# sets:
+# @P_N_U@_INCLUDE_DIRS
+# @P_N_U@_LIBRARY_DIRS
+# @P_N_U@_LIBRARIES
+
+
+@PACKAGE_INIT@
+
+#import targets
+include("${CMAKE_CURRENT_LIST_DIR}/@PROJECT_NAME@.cmake")
+
+#@P_N_U@ includes and link dirs
+set_and_check(@P_N_U@_INCLUDE_DIRS "@PACKAGE_CMAKECONFIG_INC@")
+set_and_check(@P_N_U@_LIBRARY_DIRS "@PACKAGE_CMAKECONFIG_LINK@")
+set(@P_N_U@_LIBRARIES "@CMAKECONFIG_LIB@")
+ 
+#dependencies
+set(@P_N_U@_PACKAGES @CMAKECONFIG_PKG@)
+set(@P_N_U@_PACKAGES_INC @CMAKECONFIG_PKG_INC@)
+set(@P_N_U@_PACKAGES_LINK @CMAKECONFIG_PKG_LINK@)
+set(@P_N_U@_PACKAGES_LIB @CMAKECONFIG_PKG_LIB@)
+
+foreach(PACKAGE ${@P_N_U@_PACKAGES})
+  find_package(${PACKAGE} REQUIRED)
+endforeach()
+foreach(INCLUDE ${@P_N_U@_PACKAGES_INC})
+  list(APPEND @P_N_U@_INCLUDE_DIRS ${${INCLUDE}})
+endforeach()
+foreach(LIBDIR ${@P_N_U@_PACKAGES_LINK})
+  list(APPEND @P_N_U@_LIBRARY_DIRS ${${LIBDIR}})
+endforeach()
+foreach(LIB ${@P_N_U@_PACKAGES_LIB})
+  list(APPEND @P_N_U@_LIBRARIES ${${LIB}})
+endforeach()
+
+ 
