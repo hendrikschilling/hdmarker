@@ -518,8 +518,8 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
     
   c = corners[i];
   
-  if (std::max(c.p.x, c.p.y) > 800 || std::max(c.p.x, c.p.y) < 750)
-    continue;
+  //if (std::max(c.p.x, c.p.y) > 800 || std::max(c.p.x, c.p.y) < 750)
+    //continue;
     
     /*if (idx_step == 2)
       if (norm(c.p-Point2f(4000,1000)) >= 500)
@@ -539,9 +539,9 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
 //#pragma omp critical
           //if (corners_out_map.find(id_to_key(extr_id)) != corners_map.end())
             //do_continue = true;
-//#pragma omp critical
-//          if (blacklist.find(id_pair_to_key(extr_id,c.id)) != corners_map.end())
-//            do_continue = true;
+#pragma omp critical
+          if (blacklist.find(id_pair_to_key(extr_id,c.id)) != corners_map.end())
+            do_continue = true;
           
           if (!do_continue) {
             Point2i search_id = Point2i(c.id)+Point2i(sx,sy)*idx_step;
@@ -567,8 +567,8 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
         if (!p_area_in_img_border(img, refine_p, maxlen*0.1)
           || is_diff_larger(maxlen*0.2, c.size, max_size_diff)) {
             Interpolated_Corner c_i(extr_id, refine_p, false);
-//#pragma omp critical
-//            blacklist[id_pair_to_key(extr_id,c.id)] = c_i;
+#pragma omp critical
+            blacklist[id_pair_to_key(extr_id,c.id)] = c_i;
           continue;
         }
         
@@ -578,13 +578,13 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
         
         if (rms >= rms_use_limit*min(maxlen*0.2,10.0)) {
             Interpolated_Corner c_i(extr_id, refine_p, false);
-//#pragma omp critical
-//            blacklist[id_pair_to_key(extr_id,c.id)] = c_i;
+#pragma omp critical
+            blacklist[id_pair_to_key(extr_id,c.id)] = c_i;
           continue;
         }
         
-#pragma omp critical (_paint_)
         if (paint)
+#pragma omp critical (_paint_)
           draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(maxlen*0.2, maxlen*0.2), params);
         
         Corner c_o(refine_p, extr_id, 0);
@@ -592,7 +592,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
         Interpolated_Corner c_i(extr_id, refine_p, false);
         c_i.size = maxlen*0.2;
 #pragma omp critical
-        if (corners_out_map.count(id_to_key(extr_id)) == 0)
+//        if (corners_out_map.count(id_to_key(extr_id)) == 0)
         {
           if (corners_out_map.count(id_to_key(extr_id)) != 0) {
             Interpolated_Corner c_i_old = corners_out_map[id_to_key(extr_id)];
@@ -636,7 +636,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   
   IntCMap blacklist;
   
-//#pragma omp parallel for schedule(dynamic, 10)
+#pragma omp parallel for schedule(dynamic, 10)
   for(int i=0;i<corners.size();i++) {
     int tmpsize;
 #pragma omp critical
@@ -654,8 +654,8 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
     
   Corner c = corners[i];
     
-  if (std::max(c.p.x, c.p.y) > 800 || std::max(c.p.x, c.p.y) < 700)
-    continue;
+  //if (std::max(c.p.x, c.p.y) > 800 || std::max(c.p.x, c.p.y) < 700)
+    //continue;
     
     for(int sy=-int_search_range;sy<=int_search_range;sy++)
       for(int sx=-int_search_range;sx<=int_search_range;sx++) {
