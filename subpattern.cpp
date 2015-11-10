@@ -30,11 +30,15 @@ static const float recurse_min_len = 4.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 2;
 static const double subfit_max_range = 0.2;
-static const double fit_gauss_max_tilt = 0.1;
+static const double fit_gauss_max_tilt = 2;
 static double max_accept_dist = 3.0;
 static const float max_size_diff = 0.1;
 
 static int safety_border = 2;
+
+static const double bg_weight = 0.0;
+static const double s2_mul = sqrt(0.5);
+static const double tilt_max_rms_penalty = 4.0;
 
 
 static void printprogress(int curr, int max, int &last, const char *fmt = NULL, ...)
@@ -190,7 +194,7 @@ struct Gauss2dDirectError {
     x2 = x2*x2;
     y2 = y2*y2;
     
-    residuals[0] = (T(val_) - (p[4] + (p[2]-p[4])*exp(-(x2/s2+y2/s2))))*(T(sw_)+T(0.5));
+    residuals[0] = (T(val_) - (p[4] + (p[2]-p[4])*exp(-(x2/s2+y2/s2))))*T(sw_);
     
     return true;
   }
@@ -225,7 +229,7 @@ struct Gauss2dPlaneDirectError {
     x2 = x2*x2;
     y2 = y2*y2;
 
-    residuals[0] = (T(val_) - (p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-(x2/sx2+y2/sx2))))*(T(sw_)+0.5);
+    residuals[0] = (T(val_) - (p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-(x2/sx2+y2/sx2))))*T(sw_);
     
     return true;
   }
@@ -315,7 +319,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
 {
   int w = img.size().width;
   Point2i hw = size*0.5;
-  Point2i b = Point2i(size.x, size.y)*0.1;
+  Point2i b = Point2i(size.x, size.y)*0.0;
   uint8_t *ptr = img.ptr<uchar>(0);
   
   assert(img.depth() == CV_8U);
@@ -364,14 +368,14 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   params[6] = 0.0;
   
   ceres::Problem problem_gauss_center;
-  for(y=area.y-1;y<area.br().y+1;y++)
-    for(x=area.x-1;x<area.br().x+1;x++) {
+  for(y=area.y-1;y<=area.br().y+1;y++)
+    for(x=area.x-1;x<=area.br().x+1;x++) {
       double x2 = x-p.x;
       double y2 = y-p.y;
       x2 = x2*x2;
       y2 = y2*y2;
-      double s2 = (size.x*size.x+size.y*size.y);
-      double sw = exp(-x2/s2-y2/s2);
+      double s2 = s2_mul*(size.x*size.x+size.y*size.y);
+      double sw = exp(-x2/s2-y2/s2) + bg_weight;
       ceres::CostFunction* cost_function = Gauss2dDirectCenterError::Create(ptr[y*w+x], x, y, p.x, p.y, sw);
       problem_gauss_center.AddResidualBlock(cost_function, NULL, params+2);
     }
@@ -405,15 +409,15 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   ceres::Solve(options, &problem_gauss, &summary);*/
   
   ceres::Problem problem_gauss_plane;
-  for(y=area.y-1;y<area.br().y+1;y++)
-    for(x=area.x-1;x<area.br().x+1;x++) {
+  for(y=area.y-1;y<=area.br().y+1;y++)
+    for(x=area.x-1;x<=area.br().x+1;x++) {
       double x2 = x-p.x;
       double y2 = y-p.y;
       x2 = x2*x2;
       y2 = y2*y2;
-      double s2 = (size.x*size.x+size.y*size.y);
-      double sw = exp(-x2/s2-y2/s2)*0.25;
-      ceres::CostFunction* cost_function = Gauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw*0.5);
+      double s2 = s2_mul*(size.x*size.x+size.y*size.y);
+      double sw = exp(-x2/s2-y2/s2) + bg_weight;
+      ceres::CostFunction* cost_function = Gauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
       problem_gauss_plane.AddResidualBlock(cost_function, NULL, params);
     }
     
@@ -445,10 +449,10 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   //spread to large?
   if (abs(params[3]) >= size.x*0.25)
     return FLT_MAX;
-  if (abs(params[5])+abs(params[6]) >= contrast*fit_gauss_max_tilt)
+  if (abs(params[5])+abs(params[6]) >= fit_gauss_max_tilt)
     return FLT_MAX;
   
-  return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast;
+  return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt);
 }
 
 uint64_t id_to_key(Point2i id)
