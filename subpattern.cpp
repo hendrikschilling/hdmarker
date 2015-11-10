@@ -30,7 +30,7 @@ static const float recurse_min_len = 4.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 2;
 static const double subfit_max_range = 0.2;
-static const double fit_gauss_max_tilt = 3.0;
+static const double fit_gauss_max_tilt = 0.1;
 static double max_accept_dist = 3.0;
 static const float max_size_diff = 0.1;
 
@@ -315,7 +315,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
 {
   int w = img.size().width;
   Point2i hw = size*0.5;
-  Point2i b = Point2i(size.x, size.y)*0.2;
+  Point2i b = Point2i(size.x, size.y)*0.1;
   uint8_t *ptr = img.ptr<uchar>(0);
   
   assert(img.depth() == CV_8U);
@@ -445,7 +445,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   //spread to large?
   if (abs(params[3]) >= size.x*0.25)
     return FLT_MAX;
-  if (abs(params[5])*size.x+abs(params[6])*size.y >= contrast*fit_gauss_max_tilt)
+  if (abs(params[5])+abs(params[6]) >= contrast*fit_gauss_max_tilt)
     return FLT_MAX;
   
   return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast;
@@ -463,13 +463,15 @@ uint64_t id_to_key(Point2i id)
 //FIXME define our own key and hash functios for unoredered map!
 uint64_t id_pair_to_key(Point2i id, Point2i id2)
 {
-  uint64_t key = id.x;
-  key = key << 16;
-  key = key ^ id.y;
-  key = key << 16;
-  key = key ^ id2.x;
-  key = key << 16;
+  uint64_t key = id2.x;
+  key = key << 32;
   key = key ^ id2.y;
+  
+  int dx = id.x-id2.x;
+  int dy = id.y-id2.y;
+  
+  key = key ^ (((uint64_t)dx) << 32);
+  key = key ^ (((uint64_t)dy) << 64);
   
   return key;
 }
