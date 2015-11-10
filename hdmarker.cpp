@@ -36,6 +36,8 @@ TODO: - false positive corners in post-detection
 using namespace cv;
 using namespace std;
 
+namespace hdmarker {
+  
 static int inits = 0;
       
       /*float ix, fx;
@@ -4108,7 +4110,7 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
       microbench_measure_output("norm and checker");
       
       Marker::detect_scale((*scales_border), norms, checkers, markers_raw, s, effort);
-      //cout << " count " << markers_raw.size() << " scale " << s << endl; 
+      cout << " count " << markers_raw.size() << " scale " << s << endl; 
       
 #ifdef PAINT_CANDIDATE_CORNERS
       cvtColor(img, paint, COLOR_GRAY2BGR);
@@ -4133,6 +4135,7 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
       //find missing markers
       //FIXME either use normalized for corners or change in detect_scale
       found = 1;
+//#pragma omp critical(neighbours)
       while (found) {
 	int checked_new;
 	found = 0;
@@ -4384,3 +4387,5 @@ void Marker::init(void)
             i++;
         }
 }
+
+} //namespace hdmarker

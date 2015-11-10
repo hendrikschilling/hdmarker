@@ -6,6 +6,8 @@
 
 #include "gridstore.hpp"
 
+namespace hdmarker {
+
 class Marker_Corner {
 public :
   cv::Point2f p, dir[2], pc[3];
@@ -132,5 +134,6 @@ class Marker {
     static void detect_minscale(cv::Mat &img, cv::Mat &paint, std::vector<Corner> &corners, int scale_min = 8);
 };
 
+}
 
 #endif

@@ -13,6 +13,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/@PROJECT_NAME@.cmake")
 set_and_check(@P_N_U@_INCLUDE_DIRS "@PACKAGE_CMAKECONFIG_INC@")
 set_and_check(@P_N_U@_LIBRARY_DIRS "@PACKAGE_CMAKECONFIG_LINK@")
 set(@P_N_U@_LIBRARIES "@CMAKECONFIG_LIB@")
+set(@P_N_U@_FOUND true)
  
 #dependencies
 set(@P_N_U@_PACKAGES @CMAKECONFIG_PKG@)

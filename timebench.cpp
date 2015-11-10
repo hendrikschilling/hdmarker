@@ -4,6 +4,8 @@
 #include <time.h>
 #include <stdio.h>
 
+namespace hdmarker {
+  
 #ifdef MICROBENCH
 struct timespec mb_realtime;
 struct timespec mb_cputime;
@@ -80,3 +82,6 @@ void microbench_measure_run(char *msg)
 
 void microbench_measure_stow(void);
 void microbench_output_stowed(char *msg);
+
+} //namespace hdmarker
+

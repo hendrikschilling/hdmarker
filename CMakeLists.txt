@@ -9,7 +9,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(CMAKE_SHARED_LINKER_FLAGS "-O3 -g -mssse3 -Wall")
     add_definitions(-DCOMPILER_CLANG_X86)
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    set(CMAKE_CXX_FLAGS "-Wall -g -O3 -std=c++11 -Wall -flto")
+    set(CMAKE_CXX_FLAGS "-Wall -g -O3 -std=c++11 -Wall -flto -fopenmp")
     add_definitions(-DCOMPILER_GCC_X86)
     add_definitions(-DCOMPILER_GCC)
 endif()
@@ -78,11 +78,12 @@ configure_file(hdmarker.pc.in hdmarker.pc @ONLY)
 
 install(FILES hdmarker.pc DESTINATION lib/pkgconfig)
 install(FILES hdmarker.hpp subpattern.hpp gridstore.hpp DESTINATION include/hdmarker)
-install(TARGETS hdmarker_test hdmarker_generate hdmarker hdmarker_subpattern
+install(TARGETS hdmarker hdmarker_subpattern
             EXPORT ${PROJECT_NAME}
-            RUNTIME DESTINATION bin
             LIBRARY DESTINATION lib
             ARCHIVE DESTINATION lib)
+install(TARGETS hdmarker_test hdmarker_generate 
+            RUNTIME DESTINATION bin)
 #export
 
 

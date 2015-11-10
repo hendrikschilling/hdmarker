@@ -14,6 +14,7 @@
 
 using namespace std;
 using namespace cv;
+using namespace hdmarker;
 
 const int grid_width = 1;
 const int grid_height = 1;
