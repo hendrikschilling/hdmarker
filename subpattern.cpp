@@ -494,7 +494,7 @@ bool is_diff_larger(float a, float b, float th)
 }
 
 //FIXME this is still no perfectly repeatable!
-int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, vector<Corner> &corners_out, IntCMap &blacklist, int idx_step, Mat *paint = NULL)
+int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, vector<Corner> &corners_out, IntCMap &blacklist_rec, IntCMap &blacklist, int idx_step, Mat *paint = NULL)
 {
   int counter = 0;
   int added = 0;
@@ -536,12 +536,15 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
         {
           if (corners_map.find(id_to_key(extr_id)) != corners_map.end())
             do_continue = true;
+          if (!do_continue && blacklist_rec.find(id_to_key(extr_id)) != corners_map.end())
+            do_continue = true;
 //#pragma omp critical
           //if (corners_out_map.find(id_to_key(extr_id)) != corners_map.end())
             //do_continue = true;
+          if (!do_continue)
 #pragma omp critical
-          if (blacklist.find(id_pair_to_key(extr_id,c.id)) != corners_map.end())
-            do_continue = true;
+            if (blacklist.find(id_pair_to_key(extr_id,c.id)) != corners_map.end())
+              do_continue = true;
           
           if (!do_continue) {
             Point2i search_id = Point2i(c.id)+Point2i(sx,sy)*idx_step;
@@ -635,6 +638,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   vector<Mat> blurimgs;
   
   IntCMap blacklist;
+  IntCMap blacklist_neighbours;
   
 #pragma omp parallel for schedule(dynamic, 10)
   for(int i=0;i<corners.size();i++) {
@@ -734,8 +738,8 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
               
               if (x + y <= 1 || (x == 4 && y == 0) || (x == 0 && y == 4)) {
                 Interpolated_Corner c_i(target_id, Point2f(0,0), false);
-//    #pragma omp critical
-//                blacklist[id_to_key(c_i.id)] = c_i;
+    #pragma omp critical
+                blacklist[id_to_key(c_i.id)] = c_i;
                 continue;
               }
             }
@@ -746,8 +750,8 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
                                 
             if (!p_area_in_img_border(img, refine_p, maxlen*0.1)) {
                 Interpolated_Corner c_i(target_id, Point2f(0,0), false);
-//    #pragma omp critical
-//                blacklist[id_to_key(c_i.id)] = c_i;
+    #pragma omp critical
+                blacklist[id_to_key(c_i.id)] = c_i;
                 continue;
               }
             
@@ -757,8 +761,8 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             
             if (rms >= rms_use_limit*min(maxlen*0.2,10.0)){
                 Interpolated_Corner c_i(target_id, Point2f(0,0), false);
-//    #pragma omp critical
-//                blacklist[id_to_key(c_i.id)] = c_i;
+    #pragma omp critical
+                blacklist[id_to_key(c_i.id)] = c_i;
                 continue;
               }
               
@@ -787,7 +791,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
     int found = 1;
     while (found) {
       //hdmarker_subpattern_checkneighbours results depend on corner ordering - make repeatable for threading!
-      found = hdmarker_subpattern_checkneighbours(img, corners_out, corners_out, blacklist, in_idx_step, paint);
+      found = hdmarker_subpattern_checkneighbours(img, corners_out, corners_out, blacklist, blacklist_neighbours, in_idx_step, paint);
       std::sort(corners_out.begin(), corners_out.end(), corner_cmp);
     }
     
