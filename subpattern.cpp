@@ -27,18 +27,19 @@ static const float min_fitted_contrast = 2.0; //minimum amplitude of fitted gaus
 //static const float min_fit_contrast_gradient = 0.05;
 static const float rms_use_limit = 25.0;
 static const float recurse_min_len = 4.0;
-static const int int_search_range = 11;
+static const int int_search_range = 0;
 static const int int_extend_range = 2;
 static const double subfit_max_range = 0.2;
-static const double fit_gauss_max_tilt = 2;
+static const double fit_gauss_max_tilt = 1;
 static double max_accept_dist = 3.0;
 static const float max_size_diff = 0.1;
 
 static int safety_border = 2;
 
 static const double bg_weight = 0.0;
-static const double s2_mul = sqrt(0.5);
-static const double tilt_max_rms_penalty = 4.0;
+static const double s2_mul = sqrt(1.0);
+static const double tilt_max_rms_penalty = 9.0;
+static const double border_frac = 0.2;
 
 
 static void printprogress(int curr, int max, int &last, const char *fmt = NULL, ...)
@@ -319,7 +320,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
 {
   int w = img.size().width;
   Point2i hw = size*0.5;
-  Point2i b = Point2i(size.x, size.y)*0.0;
+  Point2i b = Point2i(size.x, size.y)*border_frac;
   uint8_t *ptr = img.ptr<uchar>(0);
   
   assert(img.depth() == CV_8U);
@@ -383,10 +384,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   ceres::Solver::Options options;
   options.max_num_iterations = 1000;
   options.logging_type = ceres::LoggingType::SILENT;
-  //options.use_nonmonotonic_steps = true;
-  //options.trust_region_strategy_type = ceres::DOGLEG;
-  //options.dogleg_type = ceres::SUBSPACE_DOGLEG;
-  //options.use_inner_iterations = true;
+  options.linear_solver_type = ceres::DENSE_NORMAL_CHOLESKY;
+  options.preconditioner_type = ceres::IDENTITY;
   
   ceres::Solver::Summary summary;
   ceres::Solve(options, &problem_gauss_center, &summary);
@@ -474,8 +473,8 @@ uint64_t id_pair_to_key(Point2i id, Point2i id2)
   int dx = id.x-id2.x;
   int dy = id.y-id2.y;
   
-  key = key ^ (((uint64_t)dx) << 32);
-  key = key ^ (((uint64_t)dy) << 64);
+  key = key ^ (((uint64_t)dx) << 16);
+  key = key ^ (((uint64_t)dy) << 48);
   
   return key;
 }
@@ -514,18 +513,20 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
     corners_map[id_to_key(corners[i].id)] = c_i;
   }
   
-#pragma omp parallel for schedule(dynamic, 10)
+
+  int done = 0;
+  
+#pragma omp parallel for schedule(dynamic, 8)
   for(int i=0;i<corners.size();i++) {
     Corner c;
     
-#pragma omp critical(__print__)
-    if (i % ((corners.size()/100)+1) == 0)
-      printprogress(i, corners.size(), counter, " %d corners", corners.size());
-    
-  c = corners[i];
+    c = corners[i];
   
-  //if (std::max(c.p.x, c.p.y) > 800 || std::max(c.p.x, c.p.y) < 750)
-    //continue;
+#pragma omp atomic 
+    done++;
+  
+//   if (std::max(c.p.x, c.p.y) > 800 || std::max(c.p.x, c.p.y) < 750)
+//     continue;
     
     /*if (idx_step == 2)
       if (norm(c.p-Point2f(4000,1000)) >= 500)
@@ -538,32 +539,31 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
         Point2i extr_id = Point2i(c.id)-Point2i(sx,sy)*idx_step;
         Point2f second;
         bool do_continue = false;
-//#pragma omp critical
-        {
-          if (corners_map.find(id_to_key(extr_id)) != corners_map.end())
-            do_continue = true;
-          if (!do_continue && blacklist_rec.find(id_to_key(extr_id)) != corners_map.end())
-            do_continue = true;
-//#pragma omp critical
-          //if (corners_out_map.find(id_to_key(extr_id)) != corners_map.end())
-            //do_continue = true;
-          if (!do_continue)
+        if (corners_map.find(id_to_key(extr_id)) != corners_map.end())
+          continue;
+
+        //if (!do_continue && blacklist_rec.find(id_to_key(extr_id)) != corners_map.end())
+          //do_continue = true;
+        
+/*#pragma omp critical
+        if (corners_out_map.find(id_to_key(extr_id)) != corners_map.end())
+          do_continue = true;
+        if (do_continue)
+          continue;*/
+        
 #pragma omp critical
-            if (blacklist.find(id_pair_to_key(extr_id,c.id)) != corners_map.end())
-              do_continue = true;
-          
-          if (!do_continue) {
-            Point2i search_id = Point2i(c.id)+Point2i(sx,sy)*idx_step;
-            IntCMap::iterator it = corners_map.find(id_to_key(search_id));
-            
-            if (it == corners_map.end() || is_diff_larger(it->second.size, c.size, max_size_diff))
-              do_continue = true;
-            else
-              second = it->second.p;
-          }
-        }
+          if (blacklist.find(id_pair_to_key(extr_id,c.id)) != corners_map.end())
+            do_continue = true;
         if (do_continue)
           continue;
+        
+        Point2i search_id = Point2i(c.id)+Point2i(sx,sy)*idx_step;
+        IntCMap::iterator it = corners_map.find(id_to_key(search_id));
+        
+        if (it == corners_map.end() || is_diff_larger(it->second.size, c.size, max_size_diff))
+          continue;
+        else
+          second = it->second.p;
         
         Point2f refine_p = c.p + (c.p-second);
         
@@ -620,6 +620,10 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
         //else
         //count multiply found processed points?
       }
+      
+      if (done % ((corners.size()/100)+1) == 0)
+#pragma omp critical(__print__)
+        printprogress(done, corners.size(), counter, " %d corners", corners.size());
   }
   
   //FIXME push all corners from corners_out_map
@@ -646,16 +650,17 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   IntCMap blacklist;
   IntCMap blacklist_neighbours;
   
-#pragma omp parallel for schedule(dynamic, 10)
+  int done = 0;
+  
+#pragma omp parallel for schedule(dynamic, 8)
   for(int i=0;i<corners.size();i++) {
-    int tmpsize;
-#pragma omp critical
-    tmpsize = corners_out.size();
-    //if (i % 500 == 0 && tmpsize)
-      //imwrite("fitted.tif", paint);
+
 #pragma omp critical (_print_)
-    if (i % ((corners.size()/100)+1) == 0)
-      printprogress(i, corners.size(), counter, " %d subs", corners_out.size());
+  {
+    done++;
+    if (done % ((corners.size()/100)+1) == 0)
+      printprogress(done, corners.size(), counter, " %d subs", corners_out.size());
+  }
     int sy = 0;
     
     /*if (in_idx_step == 2)
@@ -664,8 +669,8 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
     
   Corner c = corners[i];
     
-  //if (std::max(c.p.x, c.p.y) > 800 || std::max(c.p.x, c.p.y) < 700)
-    //continue;
+//   if (std::max(c.p.x, c.p.y) > 800 || std::max(c.p.x, c.p.y) < 700)
+//     continue;
     
     for(int sy=-int_search_range;sy<=int_search_range;sy++)
       for(int sx=-int_search_range;sx<=int_search_range;sx++) {
@@ -808,7 +813,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
 
 void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size, Mat *paint)
 {
-  vector<Corner> ca, cb;
+  vector<Corner> ca, cb, all;
   if (depth <= 0) {
     corners_out = corners;
     return;
@@ -822,21 +827,38 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
   int mul = 1;
   
   ca = corners;
-  hdmarker_subpattern_step(img, ca, cb, 1, 0.5, 10, 1, paint);
+  all = corners;
+  hdmarker_subpattern_step(img, ca, cb, 1, 0.5, 10, 1, false, paint);
   mul *= 10;
+  
+  if (cb.size() <= ca.size()) {
+    corners_out = corners;
+    return;
+  }
+  
+  //FIXME what if we don't detect enough in this step?
+  
+  for(int i=0;i<all.size();i++)
+    all[i].id *= 10;
   
   for(int i=2;i<=depth;i++) {
     ca = cb;
     cb.resize(0);
     hdmarker_subpattern_step(img , ca, cb, 2, 0.0, 5, 0, true, paint);
     if (cb.size() <= ca.size()) {
+      //reset
       cb = ca;
       break;
     }
     mul *= 5;
+    for(int i=0;i<all.size();i++)
+      all[i].id *= 5;
+    all.resize(all.size()+cb.size());
+    for(int i=0;i<cb.size();i++)
+      all[all.size()-cb.size()+i] = cb[i];
   }
     
-  corners_out = cb;
+  corners_out = all;
   *size /= mul;
 }
 
