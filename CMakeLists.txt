@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8.12)
 project(hdmarker)
 string(TOUPPER ${PROJECT_NAME} P_N_U)
 
@@ -25,9 +25,9 @@ endif()
 
 
 #ceres
-list(APPEND HDMARKER_PKG Ceres)
-list(APPEND HDMARKER_PKG_INC CERES_INCLUDE_DIRS)
-list(APPEND HDMARKER_PKG_LIB CERES_LIBRARIES)
+list(APPEND HDMARKER_PRIVATE_PKG Ceres)
+list(APPEND HDMARKER_PRIVATE_PKG_INC CERES_INCLUDE_DIRS)
+list(APPEND HDMARKER_PRIVATE_PKG_LIB CERES_LIBRARIES)
 #not existing according to ceres ...Config.cmake
 #list(APPEND HDMARKER_PKG_LINK CERES_LIBRARY_DIRS)
 
@@ -49,6 +49,19 @@ foreach(LIB ${HDMARKER_PKG_LIB})
   list(APPEND HDMARKER_DEPENDS_LIB ${${LIB}})
 endforeach()
 
+foreach(PACKAGE ${HDMARKER_PRIVATE_PKG})
+  find_package(${PACKAGE} REQUIRED)
+endforeach()
+foreach(INCLUDE ${HDMARKER_PRIVATE_PKG_INC})
+  list(APPEND HDMARKER_PRIVATE_DEPENDS_INC ${${INCLUDE}})
+endforeach()
+foreach(LIBDIR ${HDMARKER_PRIVATE_PKG_LINK})
+  list(APPEND HDMARKER_PRIVATE_DEPENDS_LINK ${${LIBDIR}})
+endforeach()
+foreach(LIB ${HDMARKER_PRIVATE_PKG_LIB})
+  list(APPEND HDMARKER_PRIVATE_DEPENDS_LIB ${${LIB}})
+endforeach()
+
 #put headers in right place
 list(APPEND HDMARKER_PROJECT_HEADERS hdmarker.hpp subpattern.hpp gridstore.hpp)
 foreach(header ${HDMARKER_PROJECT_HEADERS})
@@ -56,17 +69,19 @@ foreach(header ${HDMARKER_PROJECT_HEADERS})
   configure_file(${header} "include/hdmarker/${_FILE}" COPYONLY)
 endforeach()
 
-include_directories(${HDMARKER_DEPENDS_INC})
-link_directories(${HDMARKER_DEPENDS_LINK})
+include_directories(${HDMARKER_DEPENDS_INC} ${HDMARKER_PRIVATE_DEPENDS_INC})
+link_directories(${HDMARKER_DEPENDS_LINK} ${HDMARKER_PRIVATE_DEPENDS_LINK})
 
 add_library(hdmarker SHARED hdmarker.cpp gridstore.cpp timebench.cpp subpattern.cpp)
 add_library(hdmarker_subpattern SHARED subpattern.cpp)
 
-target_link_libraries(hdmarker_subpattern ${HDMARKER_DEPENDS_LIB})
-list(APPEND HDMARKER_PROJECT_LIBRARIES hdmarker_subpattern)
-
-target_link_libraries(hdmarker ${HDMARKER_PROJECT_LIBRARIES})
+target_link_libraries(hdmarker PUBLIC ${HDMARKER_DEPENDS_LIB})
 list(APPEND HDMARKER_PROJECT_LIBRARIES hdmarker)
+
+target_link_libraries(hdmarker_subpattern PUBLIC ${HDMARKER_DEPENDS_LIB})
+target_link_libraries(hdmarker_subpattern PRIVATE ${HDMARKER_PRIVATE_DEPENDS_LIB})
+target_link_libraries(hdmarker PUBLIC hdmarker_subpattern)
+list(APPEND HDMARKER_PROJECT_LIBRARIES hdmarker_subpattern)
 
 add_executable(hdmarker_generate marker_gen.cpp)
 target_link_libraries(hdmarker_generate ${HDMARKER_PROJECT_LIBRARIES})
@@ -74,9 +89,6 @@ target_link_libraries(hdmarker_generate ${HDMARKER_PROJECT_LIBRARIES})
 add_executable(hdmarker_test test.cpp)
 target_link_libraries(hdmarker_test ${HDMARKER_PROJECT_LIBRARIES})
 
-configure_file(hdmarker.pc.in hdmarker.pc @ONLY)
-
-install(FILES hdmarker.pc DESTINATION lib/pkgconfig)
 install(FILES hdmarker.hpp subpattern.hpp gridstore.hpp DESTINATION include/hdmarker)
 install(TARGETS hdmarker hdmarker_subpattern
             EXPORT ${PROJECT_NAME}

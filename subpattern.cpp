@@ -27,7 +27,7 @@ static const float recurse_min_len = 3.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 2;
 static const double subfit_max_range = 0.1;
-static const double fit_gauss_max_tilt = 1.0;
+static const double fit_gauss_max_tilt = 2.0;
 static const float max_size_diff = 1.0;
 
 static int safety_border = 2;
@@ -51,9 +51,9 @@ public:
     _w = w;
     _h = h;
     
-    points = new Point2i[_w*_h];
+    points = new std::pair<Point2i,Point2f>[_w*_h];
     for(int i=0;i<_w*_h;i++)
-      points[i] = Point2i(-1,-1);
+      points[i].first = Point2i(-1,-1);
   }
   
   ~SimpleCloud2d()
@@ -61,30 +61,30 @@ public:
     delete[] points;
   }
   
-  bool CheckRad(Point2i p, int mindist, Point2i idx)
+  bool CheckRad(Point2f p, int mindist, Point2i idx)
   {
-    int miny = std::max(0, p.y-mindist);
-    int maxy = std::min(_h, p.y+mindist+1);
-    int minx = std::max(0, p.x-mindist);
-    int maxx = std::min(_w, p.x+mindist+1);
+    int miny = std::max(0, (int)p.y-mindist);
+    int maxy = std::min(_h, (int)p.y+mindist+1);
+    int minx = std::max(0, (int)p.x-mindist);
+    int maxx = std::min(_w, (int)p.x+mindist+1);
     
     for(int j=miny;j<maxy;j++)
       for(int i=minx;i<maxx;i++)
-        if (points[j*_w+i] != Point2i(-1,-1) && points[j*_w+i] != idx) {
+        if (points[j*_w+i].first != Point2i(-1,-1) && points[j*_w+i].first != idx && norm(points[j*_w+i].second-p) <= (double)mindist) {
           printf("ERROR: area already covered from different idx!\n");
-          cout << points[j*_w+i] << " @ " << i << "x" << j << " vs " << idx << " @ " << p.x << "x" << p.y << endl;
+          cout << points[j*_w+i].first << " @ " << points[j*_w+i].second.x << " vs " << idx << " @ " << p << endl;
           abort();
         }
   }
   
-  void add(Point2i idx, Point2i pos)
+  void add(Point2i idx, Point2f pos)
   {
     CheckRad(pos, 2, idx);
     
-    points[pos.y*_w+pos.x] = idx;
+    points[((int)pos.y)*_w+(int)(pos.x)] = std::pair<Point2i,Point2f>(idx,pos);
   }
   
-  Point2i *points;
+  std::pair<Point2i,Point2f> *points;
   
 private:
   int _w, _h;
@@ -862,7 +862,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   SimpleCloud2d points(img.size().width, img.size().height);
   
   if (corners_out.size()) {
-    imwrite("fitted.tif", *paint);
+    //imwrite("fitted.tif", *paint);
     
     std::sort(corners_out.begin(), corners_out.end(), corner_cmp);
     for(int r=1;r<=int_extend_range;r++) {
@@ -874,7 +874,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
         if (found > (corners_out.size()-found)*0.01) {
           r = 1;
         }
-        imwrite("fitted.tif", *paint);
+        //imwrite("fitted.tif", *paint);
       }
     }
     
@@ -892,7 +892,7 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
   }
   
   
-  imwrite("orig.tif", img);
+  //imwrite("orig.tif", img);
   
   if (paint) {
     paint->create(img.size(), CV_8U);
@@ -906,7 +906,7 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
   hdmarker_subpattern_step(img, ca, cb, 1, 0.5, 10, 1, false, paint);
   mul *= 10;
   
-  imwrite("debug.tif", *paint);
+  //imwrite("debug.tif", *paint);
   
   if (cb.size() <= ca.size()) {
     corners_out = corners;
@@ -936,12 +936,12 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
       corners_out[corners_out.size()-cb.size()+i] = cb[i];
     
     printf("write debug!\n");
-    imwrite("debug.tif", *paint);
+    //imwrite("debug.tif", *paint);
   }
     
   *size /= mul;
   
-  imwrite("debug_last.tif", *paint);
+  //imwrite("debug_last.tif", *paint);
 }
 
 } //namespace hdmarker
