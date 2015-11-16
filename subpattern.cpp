@@ -581,15 +581,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
   
 #pragma omp atomic 
     done++;
-  
-//   if (std::max(c.p.x, c.p.y) > 800 || std::max(c.p.x, c.p.y) < 750)
-//     continue;
-    
-    /*if (idx_step == 2)
-      if (norm(c.p-Point2f(4000,1000)) >= 500)
-        continue;*/
-    
-//#pragma omp parallel for schedule(dynamic) collapse(2)
+
     for(int sy=-int_extend_range;sy<=int_extend_range;sy++)
       for(int sx=-int_extend_range;sx<=int_extend_range;sx++) {
         
@@ -598,24 +590,21 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
         bool do_continue = false;
         if (corners_map.find(id_to_key(extr_id)) != corners_map.end())
           continue;
-
-        //if (!do_continue && blacklist_rec.find(id_to_key(extr_id)) != corners_map.end())
-          //do_continue = true;
         
+        Point2i search_id = Point2i(c.id)+Point2i(sx,sy)*idx_step;
+        IntCMap::iterator it = corners_map.find(id_to_key(search_id));
+        //FIXME size calculation might be off for heavily tilted targets...
+        if (it == corners_map.end() || is_diff_larger(it->second.size, c.size, max_size_diff))
+          continue;
+        else
+          second = it->second.p;
+
 #pragma omp critical
         if (corners_out_map.count(id_to_key(extr_id)) && corners_out_map[id_to_key(extr_id)].dist_searched < int_extend_range)
           do_continue = true;
         if (do_continue)
           continue;
         
-        Point2i search_id = Point2i(c.id)+Point2i(sx,sy)*idx_step;
-        IntCMap::iterator it = corners_map.find(id_to_key(search_id));
-        
-        //FIXME size calculation might be off for heavily tilted targets...
-        if (it == corners_map.end() || is_diff_larger(it->second.size, c.size, max_size_diff))
-          continue;
-        else
-          second = it->second.p;
         
         Point2f refine_p = c.p + (c.p-second);
         Point2f v = c.p-second;
