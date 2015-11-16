@@ -848,6 +848,14 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
       estimated = true;
     }*/
     
+    inline bool corner_within_img_border(Point2f p, Mat &img)
+    {      
+      if (p.x+b_o.x <= 2*corner_score_size || p.y+b_o.y <= 2*corner_score_size || p.x >= img.size().width-2*corner_score_size-b_o.x || p.y >= img.size().height-2*corner_score_size-b_o.y)
+        return false;
+      
+      return true;
+    }
+    
     void Marker_Corner::refine(Mat img, float refine_max, bool force, int dir_step_refine)
     {
       bool change;
@@ -870,6 +878,18 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
       
       refined = true;
 
+      /*Point2f fac(std::max(abs(dir[0].x),abs(dir[1].x)),std::max(abs(dir[0].y),abs(dir[1].y)));
+      
+      if (p.x <= 2*fac.x*corner_score_size || p.y <= 2*fac.y*corner_score_size || (int)p.x >= (int)img.size().width-(int)4*fac.x*corner_score_size-b_o.x || p.y >= img.size().height-4*fac.y*corner_score_size-b_o.y) {
+        printf("FIXME to close to image boarder!\n");
+        return;
+      }
+      
+      printf("%fx%f %f < %f\n", p.x, p.y, p.y, img.size().height-4*fac.y*corner_score_size-b_o.y);*/
+      
+      if (!corner_within_img_border(p, img))
+        return;
+      
       score = scoreCorner(img, p, dir);
       
       for(step=refine_max;step>=refine_min_step;step*=0.5) {
@@ -1885,8 +1905,7 @@ static inline float dir_rad_diff(float rada, float radb)
       neighbours = 0;
       
       corners[3] = Marker_Corner(p1->p + (p3->p-p2->p), scale);
-      if (corners[3].p.x < 2*corner_score_size || corners[3].p.y < 2*corner_score_size
-          || corners[3].p.x > img.size().width-2*corner_score_size || corners[3].p.y > img.size().height-2*corner_score_size){
+      if (!corner_within_img_border(corners[3].p, img)) {
 	id = -1;
 	page = -1;
 	score -1;
@@ -2646,7 +2665,7 @@ void localHistCont(Mat img, Mat &out, int size)
     for(int i=0;i<=2*size;i++)
       hist[img.at<uchar>(j, i)/hist_simplify]++;
   
-  for(y=size;y<img.size().height-size-1;y++) {      
+  for(y=size;y<img.size().height-size-2;y++) {      
     for(x=size;x<img.size().width-size-1;x++) {
       out.at<uchar>(y, x) = contrFromHist(hist, size, img.at<uchar>(y, x));
       
@@ -3300,10 +3319,10 @@ void simpleChessCorner_SIMD(Mat &img, Mat &out, float d)
   uint8_t *o;
   
 #pragma omp parallel for private(c, o, val, res, res2)
-  for(int y=d2;y<img.size().height-d2;y++) {
+  for(int y=d2;y<img.size().height-d2-1;y++) {
     c = &img.ptr<uchar>(0)[d2+w*y];
     o = &out.ptr<uchar>(0)[d2+w*y];
-    for(int x=d2;x<img.size().width-d2;x+=16,c+=16,o+=16) {
+    for(int x=d2;x<img.size().width-d2-1;x+=16,c+=16,o+=16) {
       dirscore_x16((uint8_t*)&res, c, c-d1, c+d1, c+h2, c-h2);
       dirscore_x16((uint8_t*)&res2, c, c-d2, c+d2, c+h1, c-h1);
       res = (v16qi)__builtin_ia32_pmaxub128((v16si)res, (v16si)res2);
