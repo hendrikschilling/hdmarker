@@ -19,28 +19,28 @@ using namespace cv;
 
 namespace hdmarker {
   
-static const float min_fit_contrast = -1.0;
+static const float min_fit_contrast = 1.0;
 static const float min_fitted_contrast = 3.0; //minimum amplitude of fitted gaussian
 //static const float min_fit_contrast_gradient = 0.05;
 static const float rms_use_limit = 25.0;
-static const float recurse_min_len = 3.5;
+static const float recurse_min_len = 3.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 2;
 static const double subfit_max_range = 0.1;
-static const double fit_gauss_max_tilt = 2.0;
+static const double fit_gauss_max_tilt = 1.0;
 static const float max_size_diff = 1.0;
 
 static int safety_border = 2;
 
 static const double bg_weight = 0.0;
 static const double s2_mul = sqrt(1.0);
-static const double tilt_max_rms_penalty = 4.0;
+static const double tilt_max_rms_penalty = 9.0;
 static const double border_frac = 0.15;
 
 static const float max_retry_dist = 0.1;
 
 static const float fit_size_min = 5.0;
-static const float max_sigma = 0.35;
+static const float max_sigma = 0.3;
 
 class SimpleCloud2d
 {
@@ -598,13 +598,14 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
           continue;
         else
           second = it->second.p;
+        
+        
 
 #pragma omp critical
         if (corners_out_map.count(id_to_key(extr_id)) && corners_out_map[id_to_key(extr_id)].dist_searched < int_extend_range)
           do_continue = true;
         if (do_continue)
           continue;
-        
         
         Point2f refine_p = c.p + (c.p-second);
         Point2f v = c.p-second;
@@ -633,7 +634,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
         if (do_continue)
           continue;
         
-        
+        points.CheckRad(refine_p, 2, extr_id);
         
         //if (idx_step == 2 && maxlen >= 40)
           //abort();
@@ -861,7 +862,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   SimpleCloud2d points(img.size().width, img.size().height);
   
   if (corners_out.size()) {
-    //imwrite("fitted.tif", paint);
+    imwrite("fitted.tif", *paint);
     
     std::sort(corners_out.begin(), corners_out.end(), corner_cmp);
     for(int r=1;r<=int_extend_range;r++) {
