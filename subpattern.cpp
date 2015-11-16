@@ -20,14 +20,14 @@ using namespace cv;
 namespace hdmarker {
   
 static const float min_fit_contrast = -1.0;
-static const float min_fitted_contrast = 2.0; //minimum amplitude of fitted gaussian
+static const float min_fitted_contrast = 3.0; //minimum amplitude of fitted gaussian
 //static const float min_fit_contrast_gradient = 0.05;
 static const float rms_use_limit = 25.0;
-static const float recurse_min_len = 3.0;
+static const float recurse_min_len = 3.5;
 static const int int_search_range = 11;
-static const int int_extend_range = 5;
+static const int int_extend_range = 2;
 static const double subfit_max_range = 0.1;
-static const double fit_gauss_max_tilt = 3.0;
+static const double fit_gauss_max_tilt = 2.0;
 static const float max_size_diff = 1.0;
 
 static int safety_border = 2;
@@ -35,9 +35,12 @@ static int safety_border = 2;
 static const double bg_weight = 0.0;
 static const double s2_mul = sqrt(1.0);
 static const double tilt_max_rms_penalty = 4.0;
-static const double border_frac = 0.2;
+static const double border_frac = 0.15;
 
 static const float max_retry_dist = 0.1;
+
+static const float fit_size_min = 5.0;
+static const float max_sigma = 0.35;
 
 class SimpleCloud2d
 {
@@ -365,9 +368,15 @@ static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i 
  */
 static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *params = NULL, bool retry_allowed = true)
 {
+  Point2f r_size = size;
+  if (r_size.x < fit_size_min)
+    r_size.x = fit_size_min;
+  if (r_size.y < fit_size_min)
+    r_size.y = fit_size_min;
+  
   int w = img.size().width;
-  Point2i hw = size*0.5;
-  Point2i b = Point2i(size.x, size.y)*border_frac;
+  Point2i hw = r_size*0.5;
+  Point2i b = Point2f(r_size.x, r_size.y)*border_frac;
   uint8_t *ptr = img.ptr<uchar>(0);
   
   assert(img.depth() == CV_8U);
@@ -382,35 +391,14 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   params[0] = 0.0;
   params[1] = 0.0;
   
-  Rect area(p.x-hw.x+b.x, p.y-hw.y+b.y, size.x-2*b.x, size.y-2*b.y);
+  Rect area(p.x+0.5-hw.x+b.x, p.y+0.5-hw.y+b.y, r_size.x-2*b.x, r_size.y-2*b.y);
   
   int y, x;
   
-  /*int sum = 0;
-  int x, y = area.y;
-  for(x=area.x;x<area.br().x-1;x++)
-    sum += ptr[y*w+x];
-  y = area.br().y-2;
-  for(x=area.x+1;x<area.br().x;x++)
-    sum += ptr[y*w+x];
-  x = area.x;
-  for(y=area.y+1;y<area.br().y;y++)
-    sum += ptr[y*w+x];
-  x = area.br().x-2;
-  for(y=area.y;y<area.br().y-1;y++)
-    sum += ptr[y*w+x];
-  
-  //background
-  params[4] = sum / (2*(size.x-b.x) + 2*(size.y-b.y));
-  
-  //amplitude
-  //TODO use (small area?)
-  params[2] = ptr[int(p.y)*w + int(p.x)];*/
-  
   int min_v = 255;
   int max_v = 0;
-  for(y=area.y;y<=area.br().y+1;y++)
-    for(x=area.x;x<=area.br().x+1;x++) {
+  for(y=area.y;y<=area.br().y;y++)
+    for(x=area.x;x<=area.br().x;x++) {
       min_v = std::min<int>(ptr[y*w+x],min_v);
       max_v = std::max<int>(ptr[y*w+x],max_v);
     }
@@ -436,8 +424,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   params[6] = 0.0;
   
   ceres::Problem problem_gauss_center;
-  for(y=area.y;y<=area.br().y+1;y++)
-    for(x=area.x;x<=area.br().x+1;x++) {
+  for(y=area.y;y<=area.br().y;y++)
+    for(x=area.x;x<=area.br().x;x++) {
       double x2 = x-p.x;
       double y2 = y-p.y;
       x2 = x2*x2;
@@ -475,8 +463,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   ceres::Solve(options, &problem_gauss, &summary);*/
   
   ceres::Problem problem_gauss_plane;
-  for(y=area.y-1;y<=area.br().y+1;y++)
-    for(x=area.x-1;x<=area.br().x+1;x++) {
+  for(y=area.y-1;y<=area.br().y;y++)
+    for(x=area.x-1;x<=area.br().x;x++) {
       double x2 = x-p.x;
       double y2 = y-p.y;
       x2 = x2*x2;
@@ -497,34 +485,26 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   
   p.x += sin(params[0])*(size.x*subfit_max_range);
   p.y += sin(params[1])*(size.y*subfit_max_range);
+
   
   //printf(" -> %fx%f rms %f\n", p.x, p.y, sqrt(summary2.final_cost/problem_gauss.NumResiduals()));
   
   //minimal possible contrast
   double contrast = abs(params[2]-params[4])*exp(-(0.25/(2.0*params[3]*params[3])+0.25/(2.0*params[3]*params[3])));
+  contrast = std::min(255.0, contrast);
   
+  //if (norm(Point2f(636,1118) - p) < 1.0  && !retry_allowed)
+    //abort();
   
   if (contrast <= min_fitted_contrast)
     return FLT_MAX;
-  //if (contrast*params[3] <= min_fit_contrast_gradient*(size.x+size.y))
-    //return FLT_MAX;
-  //if (summary.termination_type != ceres::CONVERGENCE)
-    //return FLT_MAX;
   if (params[4] <= 0 || params[4] >= 255)
     return FLT_MAX;
-  //nonsensical background?
-  //spread to large?
-  if (abs(params[3]) >= size.x*0.25)
+  if (abs(params[3]) >= size.x*max_sigma)
     return FLT_MAX;
   
-  if (retry_allowed)
-    return fit_gauss_direct(img, size-size*0.15, p, params, false);
-  
-  if (std::max(abs(params[5]),abs(params[6])) >= fit_gauss_max_tilt) {
-    if (norm(p - Point2f(340,822)) < 5 && !retry_allowed)
-      abort();
-    return FLT_MAX;
-  }
+  if (retry_allowed) 
+    return fit_gauss_direct(img, size, p, params, false);
   
   return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt);
 }
