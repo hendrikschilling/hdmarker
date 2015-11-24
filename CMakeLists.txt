@@ -167,7 +167,7 @@ install(FILES ${${P_N_U}_FULLPATH_HEADERS} DESTINATION include/${PROJECT_NAME} )
 #local export into binary dir (may be used with cmake .. -DCMAKE_PREFIX_PATH=<...> or with cmake-gui)
 if (${CMAKE_VERSION} VERSION_LESS 3.0.0)
   #TODO use a generated list of targets!
-  export(TARGETS clif cliini FILE ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.cmake)
+  export(TARGETS hdmarker hdmarker_subpattern FILE ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.cmake)
 else()
   message(${CMAKE_VERSION})
   export(EXPORT ${PROJECT_NAME} FILE ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.cmake)
