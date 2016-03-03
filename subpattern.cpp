@@ -559,8 +559,27 @@ bool is_diff_larger(float a, float b, float th)
     return false;
 }
 
+static bool marker_corner_valid(const Corner &c, int page, bool checkrange, const Rect & limit)
+{
+  if (page != -1 && c.page != page)
+    return false;
+  
+  if (checkrange && !limit.contains(c.id))
+    return false;
+  
+  return true;
+}
+
+static bool check_limit(Point2i c, bool checkrange, const Rect & limit)
+{ 
+  if (checkrange && !limit.contains(c))
+    return false;
+  
+  return true;
+}
+
 //FIXME this is still no perfectly repeatable!
-int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, vector<Corner> &corners_out, IntCMap &blacklist_rec, IntCLMap &blacklist, int idx_step, int int_extend_range, SimpleCloud2d &points, Mat *paint = NULL, bool *mask_2x2 = NULL)
+int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, vector<Corner> &corners_out, IntCMap &blacklist_rec, IntCLMap &blacklist, int idx_step, int int_extend_range, SimpleCloud2d &points, Mat *paint = NULL, bool *mask_2x2 = NULL, bool checkrange = false, const cv::Rect limit = Rect())
 {
   int counter = 0;
   int added = 0;
@@ -578,7 +597,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
   
   int done = 0;
   
-#pragma omp parallel for schedule(dynamic, 8)
+//#pragma omp parallel for schedule(dynamic, 8)
   for(int i=0;i<corners.size();i++) {
     Corner c;
     
@@ -596,6 +615,10 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
       for(int sx=-extend_range;sx<=extend_range;sx++) {
         
         Point2i extr_id = Point2i(c.id)-Point2i(sx,sy)*idx_step;
+        
+        if (!check_limit(extr_id, checkrange, limit))
+          continue;
+        
         Point2f second;
         bool do_continue = false;
         if (corners_map.find(id_to_key(extr_id)) != corners_map.end())
@@ -650,7 +673,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
 #pragma omp critical
         {
           if (!points.CheckRad(refine_p, 2, extr_id)) {
-            //imwrite("fitted.tif", *paint);
+            imwrite("fitted.tif", *paint);
             abort();
           }
         }
@@ -703,6 +726,10 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
           }
           else {
             added++;
+            if (!points.CheckRad(refine_p, 2, extr_id)) {
+              imwrite("fitted.tif", *paint);
+              abort();
+            }
             points.add(extr_id, Point2i(c_i.p.x+0.5, c_i.p.y+0.5));
             corners_out_map[id_to_key(extr_id)] = c_i;
             //FIXME add same corner multiple times if found from different direction?
@@ -731,7 +758,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
   return added;
 }
 
-void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours, Mat *paint, bool *mask_2x2)
+void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours, Mat *paint, bool *mask_2x2, int page, bool checkrange, const cv::Rect limit)
 {  
   int counter = 0;
   sort(corners.begin(), corners.end(), corner_cmp);
@@ -845,6 +872,10 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
         for(int y=0;y<5;y++)
           for(int x=0;x<5;x++) {
             Point2i target_id(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset);
+            
+            if (!check_limit(target_id, checkrange, limit))
+              continue;
+            
             if (ignore_corner_neighbours) {
               
               if (x + y <= 1 || (x == 4 && y == 0) || (x == 0 && y == 4)) {
@@ -912,7 +943,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
       int found = corners_out.size();
       while (found > (corners_out.size()-found)*0.01 || (found && r == int_extend_range)) {
         //hdmarker_subpattern_checkneighbours results depend on corner ordering - make repeatable for threading!
-        found = hdmarker_subpattern_checkneighbours(img, corners_out, corners_out, blacklist, blacklist_neighbours, 2, r, points, paint, mask_2x2);
+        found = hdmarker_subpattern_checkneighbours(img, corners_out, corners_out, blacklist, blacklist_neighbours, 2, r, points, paint, mask_2x2, checkrange, limit);
         std::sort(corners_out.begin(), corners_out.end(), corner_cmp);
         if (found > (corners_out.size()-found)*0.01) {
           r = 1;
@@ -925,14 +956,18 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   }
 }
 
-void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size, Mat *paint, bool *mask_2x2, int page)
+void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size, Mat *paint, bool *mask_2x2, int page, const cv::Rect limit)
 {
+  bool checkrange = true;
+  
   vector<Corner> ca, cb, all;
   if (depth <= 0) {
     corners_out = corners;
     return;
   }
   
+  if (!limit.tl().x && !limit.tl().y && !limit.br().x &&!limit.br().y)
+    checkrange = false;
   
   //imwrite("orig.tif", img);
   
@@ -941,19 +976,15 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
     paint->setTo(Scalar(0));
   }
   
-  int mul = 1;
-  int in_idx_step = 1;
   
-  if (page == -1)
-    ca = corners;
-  else
-    for (auto c : corners)
-      if (c.page == page)
-        ca.push_back(c);
+  for (auto & c : corners)
+    if (marker_corner_valid(c, page, checkrange, limit))
+      ca.push_back(c);
         
   corners_out = corners;
-  hdmarker_subpattern_step(img, ca, cb, in_idx_step, 0.5, 10, 1, false, paint, mask_2x2);
-  mul *= 10;
+  int in_idx_step = 1;
+  int mul = 10;
+  hdmarker_subpattern_step(img, ca, cb, in_idx_step, 0.5, 10, 1, false, paint, mask_2x2, page, checkrange, Rect(limit.tl().x*mul,limit.tl().y*mul,limit.size().width*mul,limit.size().height*mul));
   in_idx_step = 2;
   
   //imwrite("debug.tif", *paint);
@@ -975,7 +1006,7 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
   for(int i=2;i<=depth;i++) {
     ca = cb;
     cb.resize(0);
-    hdmarker_subpattern_step(img , ca, cb, in_idx_step, 0.0, 5, 0, true, paint, mask_2x2);
+    hdmarker_subpattern_step(img , ca, cb, in_idx_step, 0.0, 5, 0, true, paint, mask_2x2, page, checkrange, Rect(limit.tl().x*mul,limit.tl().y*mul,limit.size().width*mul,limit.size().height*mul));
     in_idx_step = 1;
     printf("stepped!\n");
     if (cb.size() <= ca.size()) {

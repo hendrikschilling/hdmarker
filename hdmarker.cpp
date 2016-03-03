@@ -1171,6 +1171,9 @@ void Marker_Corner::cornerSubPixCPMask( InputArray _image, Point2f &p,
 	return;
       
       refined = true;
+      
+      if (size <= 2)
+        return;
 
       dir[0].x = size*cos(dir_rad[0]);
       dir[0].y = size*sin(dir_rad[0]);
@@ -3496,6 +3499,7 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
     return;
   
 #ifdef PAINT_CANDIDATE_CORNERS
+  char buf[64];
   sprintf(buf, "corner_cand_%d.png", scale_idx);
   imwrite(buf, checker);
   Mat paint;
@@ -4353,6 +4357,9 @@ void Marker::detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_s
 	delete allcorners[j];
     }
     
+#ifdef PAINT_CANDIDATE_CORNERS
+    cv::imwrite("debug.tif", paint);
+#endif
     
     //cout << " corners: " << corners.size() << endl; 
     //cout << "                                                                             \r";
