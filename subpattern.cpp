@@ -597,7 +597,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
   
   int done = 0;
   
-//#pragma omp parallel for schedule(dynamic, 8)
+#pragma omp parallel for schedule(dynamic, 8)
   for(int i=0;i<corners.size();i++) {
     Corner c;
     
@@ -758,7 +758,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
   return added;
 }
 
-void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours, Mat *paint, bool *mask_2x2, int page, bool checkrange, const cv::Rect limit)
+void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours, Mat *paint, bool *mask_2x2, int page, bool checkrange, const cv::Rect limit, bool show_progress = false)
 {  
   int counter = 0;
   sort(corners.begin(), corners.end(), corner_cmp);
@@ -859,10 +859,11 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             minlen = len;
         }
         minlen = sqrt(minlen);
-        
+                
         
         if (minlen < 5*minsize_fac*recurse_min_len)
           continue;
+        
         
         //FIXME need to use scale-space for perspective transform?
         //size = std::max<int>(std::min<int>(maxlen*subfit_oversampling/5, subfit_max_size), subfit_min_size);
@@ -902,6 +903,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             double rms = fit_gauss_direct(img, Point2f(minlen*0.2, minlen*0.2), refine_p, params, mask_2x2);
             
             if (rms >= rms_use_limit*min(minlen*0.2,10.0)){
+              
                 Interpolated_Corner c_i(target_id, Point2f(0,0), false);
     #pragma omp critical
                 blacklist[id_to_key(c_i.id)] = c_i;
@@ -1006,7 +1008,7 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
   for(int i=2;i<=depth;i++) {
     ca = cb;
     cb.resize(0);
-    hdmarker_subpattern_step(img , ca, cb, in_idx_step, 0.0, 5, 0, true, paint, mask_2x2, page, checkrange, Rect(limit.tl().x*mul,limit.tl().y*mul,limit.size().width*mul,limit.size().height*mul));
+    hdmarker_subpattern_step(img , ca, cb, in_idx_step, 0.0, 5, 0, true, paint, mask_2x2, page, checkrange, Rect(limit.tl().x*mul*5,limit.tl().y*mul*5,limit.size().width*mul*5,limit.size().height*mul*5));
     in_idx_step = 1;
     printf("stepped!\n");
     if (cb.size() <= ca.size()) {
