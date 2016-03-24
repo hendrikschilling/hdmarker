@@ -23,6 +23,9 @@ if (APPLE)
     endif()
 endif()
 
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 
 #ceres
 list(APPEND HDMARKER_PRIVATE_PKG Ceres)
@@ -63,17 +66,17 @@ foreach(LIB ${HDMARKER_PRIVATE_PKG_LIB})
 endforeach()
 
 #put headers in right place
-list(APPEND HDMARKER_PROJECT_HEADERS hdmarker.hpp subpattern.hpp gridstore.hpp)
+list(APPEND HDMARKER_PROJECT_HEADERS src/lib/hdmarker.hpp src/lib/subpattern.hpp src/lib/gridstore.hpp src/lib/loess.hpp)
 foreach(header ${HDMARKER_PROJECT_HEADERS})
   get_filename_component(_FILE ${header} NAME)
   configure_file(${header} "include/hdmarker/${_FILE}" COPYONLY)
 endforeach()
 
-include_directories(${HDMARKER_DEPENDS_INC} ${HDMARKER_PRIVATE_DEPENDS_INC})
+include_directories(src/lib ${HDMARKER_DEPENDS_INC} ${HDMARKER_PRIVATE_DEPENDS_INC})
 link_directories(${HDMARKER_DEPENDS_LINK} ${HDMARKER_PRIVATE_DEPENDS_LINK})
 
-add_library(hdmarker SHARED hdmarker.cpp gridstore.cpp timebench.cpp subpattern.cpp)
-add_library(hdmarker_subpattern SHARED subpattern.cpp)
+add_library(hdmarker SHARED src/lib/hdmarker.cpp src/lib/gridstore.cpp src/lib/timebench.cpp src/lib/subpattern.cpp)
+add_library(hdmarker_subpattern SHARED src/lib/subpattern.cpp)
 
 target_link_libraries(hdmarker PUBLIC ${HDMARKER_DEPENDS_LIB})
 list(APPEND HDMARKER_PROJECT_LIBRARIES hdmarker)
@@ -83,10 +86,10 @@ target_link_libraries(hdmarker_subpattern PRIVATE ${HDMARKER_PRIVATE_DEPENDS_LIB
 target_link_libraries(hdmarker PUBLIC hdmarker_subpattern)
 list(APPEND HDMARKER_PROJECT_LIBRARIES hdmarker_subpattern)
 
-add_executable(hdmarker_generate marker_gen.cpp)
+add_executable(hdmarker_generate src/bin/marker_gen.cpp)
 target_link_libraries(hdmarker_generate ${HDMARKER_PROJECT_LIBRARIES})
 
-add_executable(hdmarker_test test.cpp)
+add_executable(hdmarker_test src/bin/test.cpp)
 target_link_libraries(hdmarker_test ${HDMARKER_PROJECT_LIBRARIES})
 
 install(FILES hdmarker.hpp subpattern.hpp gridstore.hpp DESTINATION include/hdmarker)
