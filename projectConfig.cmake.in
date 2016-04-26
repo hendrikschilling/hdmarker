@@ -47,11 +47,13 @@ set(@PNU@_INCLUDE_DIRS "@PACKAGE_CMAKECONFIG_INC@")
 set(@PNU@_LIBRARY_DIRS "@PACKAGE_CMAKECONFIG_LINK@")
 set(@PNU@_LIBRARIES "@CMAKECONFIG_LIB@")
 set(@PNU@_FEATURES "@CMAKECONFIG_FEATURES@")
+set(@PNU@_FOUND false)
+
+
+#dependencies nicely packaged
 set(@PNU@_PKG_COMPONENTS "@CMAKECONFIG_PKG_COMPONENTS@")
 set(@PNU@_PKG_EXPORT_VARS "@CMAKECONFIG_PKG_EXPORT_VARS@")
-set(@PNU@_FOUND true)
  
-#dependencies nicely packaged
 set(@PNU@_PACKAGES @CMAKECONFIG_PKG@)
 set(@PNU@_PACKAGES_INC @CMAKECONFIG_PKG_INC@)
 set(@PNU@_PACKAGES_LINK @CMAKECONFIG_PKG_LINK@)
@@ -107,6 +109,7 @@ endif()
 #message("@PNU@ dependency search")
 #search package, try our own findXXX.cmake in find dir if not found
 # FIXME check wether package was already searched and found!
+set(@PNU@_MISSING "")
 foreach(PACKAGE ${@PNU@_PACKAGES})
   if (FDP_HAVE_SEARCHED_${PACKAGE} AND "${FDP_HAVE_SEARCHED_${PACKAGE}_COMPONENTS}" STREQUAL "${@PNU@_${PACKAGE}_COMPONENTS}")
     #message("already searched for ${PACKAGE}")
@@ -142,20 +145,36 @@ foreach(PACKAGE ${@PNU@_PACKAGES})
       set(FDP_HAVE_FOUND_${PACKAGE} TRUE)
     else()
       set(FDP_HAVE_FOUND_${PACKAGE} FALSE)
+      list(APPEND @PNU@_MISSING ${PACKAGE})
     endif()
-    
-  
   endif()
 endforeach()
 
-foreach(INCLUDE ${@PNU@_PACKAGES_INC})
-  list(APPEND @PNU@_INCLUDE_DIRS ${${INCLUDE}})
-endforeach()
+if (NOT @PNU@_MISSING)
+  set(@PNU@_FOUND TRUE)
+  
+  foreach(INCLUDE ${@PNU@_PACKAGES_INC})
+    list(APPEND @PNU@_INCLUDE_DIRS ${${INCLUDE}})
+  endforeach()
 
-foreach(LIBDIR ${@PNU@_PACKAGES_LINK})
-  list(APPEND @PNU@_LIBRARY_DIRS ${${LIBDIR}})
-endforeach()
+  foreach(LIBDIR ${@PNU@_PACKAGES_LINK})
+    list(APPEND @PNU@_LIBRARY_DIRS ${${LIBDIR}})
+  endforeach()
 
-foreach(LIB ${@PNU@_PACKAGES_LIB})
-  list(APPEND @PNU@_LIBRARIES ${${LIB}})
-endforeach()
+  foreach(LIB ${@PNU@_PACKAGES_LIB})
+    list(APPEND @PNU@_LIBRARIES ${${LIB}})
+  endforeach()
+else()
+  set(@PNU@_INCLUDE_DIRS "")
+  set(@PNU@_LIBRARY_DIRS "")
+  set(@PNU@_LIBRARIES "")
+  set(@PNU@_FEATURES "")
+  set(@PNU@_FOUND FALSE)
+  
+  message("@PNU@ missing dependencies")
+  foreach(L ${@PNU@_MISSING})
+    message("   ${L}")
+  endforeach()
+  message(FATAL_ERROR "stopping.")
+endif()
+
