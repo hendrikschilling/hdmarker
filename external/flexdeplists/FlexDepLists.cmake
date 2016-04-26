@@ -43,6 +43,8 @@
 # used to include CMakePackageConfigListHelpers.cmake and projectConfig.cmake.in
 set(FLEXDEPLISTS_DIR ${CMAKE_CURRENT_LIST_DIR})
 
+include(CMakeParseArguments)
+
 if (NOT WIN32)
   string(ASCII 27 Esc)
   set(ColourReset "${Esc}[m")
