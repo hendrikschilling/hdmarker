@@ -1,0 +1,161 @@
+# - Config file for the clif package
+# It defines the following variables
+#  CLIF_INCLUDE_DIRS - include directories for clif
+#  CLIF_LIBRARIES    - libraries to link against
+#  CLIF_EXECUTABLE   - the bar executable
+#  CLIF_LIBRARY_DIRS - where to find libraries
+ 
+# Compute paths
+#get_filename_component(CLIF_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+
+@PACKAGE_INIT@
+
+cmake_policy(SET CMP0011 NEW)
+if (POLICY CMP0054)
+  cmake_policy(SET CMP0054 NEW)
+endif()
+
+function(pkg_found PKG RET)
+  string(TOLOWER ${PKG} LOW)
+  string(TOUPPER ${PKG} UP)
+  
+  set(${RET} FALSE PARENT_SCOPE) 
+  
+  if (${PKG}_FOUND)
+    set(${RET} TRUE PARENT_SCOPE)
+      return()
+  endif()
+  if (${LOW}_FOUND)
+    set(${RET} TRUE PARENT_SCOPE)
+      return()
+  endif()
+  if (${UP}_FOUND)
+    set(${RET} TRUE PARENT_SCOPE)
+      return()
+  endif()
+  
+  if (@PNU@_${PKG}_FOUND_INDICATOR)
+    if (${@PNU@_${PKG}_FOUND_INDICATOR})
+      set(${RET} TRUE PARENT_SCOPE)
+      return()
+    endif()
+  endif()
+endfunction()
+
+#@PNU@ includes and link dirs 
+set(@PNU@_INCLUDE_DIRS "@PACKAGE_CMAKECONFIG_INC@")
+set(@PNU@_LIBRARY_DIRS "@PACKAGE_CMAKECONFIG_LINK@")
+set(@PNU@_LIBRARIES "@CMAKECONFIG_LIB@")
+set(@PNU@_FEATURES "@CMAKECONFIG_FEATURES@")
+set(@PNU@_PKG_COMPONENTS "@CMAKECONFIG_PKG_COMPONENTS@")
+set(@PNU@_PKG_EXPORT_VARS "@CMAKECONFIG_PKG_EXPORT_VARS@")
+set(@PNU@_FOUND true)
+ 
+#dependencies nicely packaged
+set(@PNU@_PACKAGES @CMAKECONFIG_PKG@)
+set(@PNU@_PACKAGES_INC @CMAKECONFIG_PKG_INC@)
+set(@PNU@_PACKAGES_LINK @CMAKECONFIG_PKG_LINK@)
+set(@PNU@_PACKAGES_LIB @CMAKECONFIG_PKG_LIB@)
+
+foreach(F ${@PNU@_FEATURES})
+  set(${F} true)
+  string(REPLACE "-" "_" F ${F})
+  add_definitions(-D${F})
+endforeach()
+
+#########
+# comps
+#####
+list(LENGTH @PNU@_PKG_COMPONENTS COMP_L_LEN)
+math(EXPR COMP_L_MAX "${COMP_L_LEN} - 1")
+
+#reset comp lists
+if (NOT ${COMP_L_LEN} LESS 1)
+  foreach(IDX RANGE 0 ${COMP_L_MAX} 2)
+    math(EXPR IDX2 "${IDX} + 1")
+    list(GET @PNU@_PKG_COMPONENTS ${IDX} C_PKG)
+    list(GET @PNU@_PKG_COMPONENTS ${IDX2} C)
+    set(${C_PKG} "")
+  endforeach()
+endif()
+
+if (NOT ${COMP_L_LEN} LESS 1)
+  foreach(IDX RANGE 0 ${COMP_L_MAX} 2)
+    math(EXPR IDX2 "${IDX} + 1")
+    list(GET @PNU@_PKG_COMPONENTS ${IDX} C_PKG)
+    list(GET @PNU@_PKG_COMPONENTS ${IDX2} C)
+    list(APPEND ${C_PKG} ${C})
+  endforeach()
+endif()
+
+#######
+# export vars
+#####
+list(LENGTH @PNU@_PKG_EXPORT_VARS COMP_L_LEN)
+math(EXPR COMP_L_MAX "${COMP_L_LEN} - 1")
+
+#set variables from list
+if (NOT ${COMP_L_LEN} LESS 1)
+  foreach(IDX RANGE 0 ${COMP_L_MAX} 2)
+    math(EXPR IDX2 "${IDX} + 1")
+    list(GET @PNU@_PKG_EXPORT_VARS ${IDX} NAME)
+    list(GET @PNU@_PKG_EXPORT_VARS ${IDX2} VALUE)
+    set(${NAME} ${VALUE})
+  endforeach()
+endif()
+
+#message("@PNU@ dependency search")
+#search package, try our own findXXX.cmake in find dir if not found
+# FIXME check wether package was already searched and found!
+foreach(PACKAGE ${@PNU@_PACKAGES})
+  if (FDP_HAVE_SEARCHED_${PACKAGE} AND "${FDP_HAVE_SEARCHED_${PACKAGE}_COMPONENTS}" STREQUAL "${@PNU@_${PACKAGE}_COMPONENTS}")
+    #message("already searched for ${PACKAGE}")
+  else()
+    set(FDP_HAVE_SEARCHED_${PACKAGE} true)
+    set(FDP_HAVE_SEARCHED_${PACKAGE}_COMPONENTS ${@PNU@_${PACKAGE}_COMPONENTS})
+  
+  
+    if (@PNU@_${PACKAGE}_COMPONENTS)
+      #message(STATUS "search with COMPS: ${@PNU@_${PACKAGE}_COMPONENTS}")
+      find_package(${PACKAGE} QUIET COMPONENTS ${@PNU@_${PACKAGE}_COMPONENTS} ${@PNU@_${PACKAGE}_FIND_FLAGS})
+    else()
+      find_package(${PACKAGE} QUIET ${@PNU@_${PACKAGE}_FIND_FLAGS})
+    endif()
+    
+    pkg_found(${PACKAGE} FOUND)
+    if (FOUND)
+      #message("${PACKAGE} - found")
+    else()
+      string(TOLOWER ${PACKAGE} PKG_LOW)
+      list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/find/${PKG_LOW})
+    endif()
+    
+    if (@PNU@_${PACKAGE}_COMPONENTS)
+      find_package(${PACKAGE} QUIET COMPONENTS ${@PNU@_${PACKAGE}_COMPONENTS} ${@PNU@_${PACKAGE}_FIND_FLAGS})
+    else()
+      find_package(${PACKAGE} QUIET ${@PNU@_${PACKAGE}_FIND_FLAGS})
+    endif()
+    
+    
+    pkg_found(${PACKAGE} FOUND)
+    if (FOUND)
+      set(FDP_HAVE_FOUND_${PACKAGE} TRUE)
+    else()
+      set(FDP_HAVE_FOUND_${PACKAGE} FALSE)
+    endif()
+    
+  
+  endif()
+endforeach()
+
+foreach(INCLUDE ${@PNU@_PACKAGES_INC})
+  list(APPEND @PNU@_INCLUDE_DIRS ${${INCLUDE}})
+endforeach()
+
+foreach(LIBDIR ${@PNU@_PACKAGES_LINK})
+  list(APPEND @PNU@_LIBRARY_DIRS ${${LIBDIR}})
+endforeach()
+
+foreach(LIB ${@PNU@_PACKAGES_LIB})
+  list(APPEND @PNU@_LIBRARIES ${${LIB}})
+endforeach()
