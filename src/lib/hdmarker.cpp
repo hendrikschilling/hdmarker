@@ -1,5 +1,11 @@
 #include "hdmarker.hpp"
 
+#ifdef WIN32
+  #define _USE_MATH_DEFINES
+  #include <math.h>
+  #include <cstdint>
+#endif
+
 #include <iostream>
 #include <assert.h>
 #include <stdio.h>
@@ -98,13 +104,15 @@ int global_counter = 0;
 
 typedef unsigned int uint;
 
-typedef char v16si __attribute__ ((vector_size (16)));
-typedef unsigned char v16qi __attribute__ ((vector_size (16)));
-typedef int16_t v8si __attribute__ ((vector_size(16)));
-typedef uint16_t v8qi __attribute__ ((vector_size (16)));
-typedef long long v2di __attribute__ ((vector_size (16)));
-typedef int32_t v4si __attribute__ ((vector_size (16)));
-typedef float v4f __attribute__ ((vector_size (16), aligned(16))); 
+#ifndef WIN32
+  typedef char v16si __attribute__ ((vector_size (16)));
+  typedef unsigned char v16qi __attribute__ ((vector_size (16)));
+  typedef int16_t v8si __attribute__ ((vector_size(16)));
+  typedef uint16_t v8qi __attribute__ ((vector_size (16)));
+  typedef long long v2di __attribute__ ((vector_size (16)));
+  typedef int32_t v4si __attribute__ ((vector_size (16)));
+  typedef float v4f __attribute__ ((vector_size (16), aligned(16)));
+#endif 
 
 vector<Point2f> box_corners;
 vector<Point2f> box_corners_pers;
@@ -263,6 +271,8 @@ static inline int warp_getpoint2(uchar *srcptr, int w, Point2f c, Point2f d1, Po
 const uint16_t getpoints_intscale = 32;
 const uint16_t getpoints_intscale2 = 256;
 
+#ifndef WIN32
+
 //ATTENTION max image dimension 2**16/getpoints_intscale for this function!
 static inline int warp_getpoints_x8(uchar *srcptr, int w, Point2f c, Point2f d1, Point2f d2, uint16_t *x, uint16_t *y)
 {
@@ -374,6 +384,8 @@ static inline int warp_getpoints_x8(uchar *srcptr, int w, Point2f c, Point2f d1,
         
     return val*(1.0/(gi*gi));
 }
+
+#endif
     
     /*double Marker_Corner::scoreCorner(Mat &img, Point2f p, Point2f dir[2])
     {
@@ -569,6 +581,8 @@ static inline int warp_getpoints_x8(uchar *srcptr, int w, Point2f c, Point2f d1,
 	return (double)(wh-bl) / (2*(corner_score_size*corner_score_size-corner_score_dead*corner_score_dead)*256);
     }
 
+#ifndef WIN32
+
 static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
 {
     int s = corner_score_size;
@@ -636,6 +650,7 @@ static double scoreCorner_SIMD(Mat &img, Point2f p, Point2f dir[2])
     return (double)(wh-bl) / (2*(corner_score_size*corner_score_size-corner_score_dead*corner_score_dead)*256);
 }
     
+#endif
     
     void Marker_Corner::refineDir(Mat img, float range)
     {
@@ -2847,6 +2862,7 @@ void norm_avg(Mat img, Mat &out, int size)
     }
 }
 
+#ifndef WIN32
 
 void norm_avg_SIMD(Mat img, Mat &out, int size)
 {
@@ -2927,6 +2943,7 @@ void norm_avg_SIMD(Mat img, Mat &out, int size)
   }
 }
 
+#endif
 
 void localHistContUnderSampled(Mat img, Mat &out, int size, int step)
 {
@@ -3078,6 +3095,8 @@ static inline int dirscore2(int c, int a1, int a2, int b1, int b2)
   return max(min(abs((a1+a2)-(b1+b2))-abs(a1-a2)*2-abs(b1-b2)*2, 255), 0);
 }
 
+#ifndef WIN32
+
 static inline void dirscore_x16(uint8_t *res, uint8_t *c, uint8_t *a1, uint8_t *a2, uint8_t *b1, uint8_t *b2)
 {
   v16qi va1, va2, vb1, vb2, vc, vavg, vavg1, vda, vdb, vsa, vsb;
@@ -3199,6 +3218,8 @@ static inline void dirscore2_x16(uint8_t *res, uint8_t *c, uint8_t *a1, uint8_t 
   memcpy(res, &vsmax, 16);
 }
 
+#endif
+
 void simpleChessCorner(Mat &img, Mat &out, float d)
 { 
   int d1 = d;
@@ -3260,6 +3281,7 @@ void simpleChessCorner2(Mat &img, Mat &sblur, Mat &bblur, Mat &out, float d)
   }
 }
 
+#ifndef WIN32
 
 void simpleChessCorner2_SIMD(Mat &img, Mat &sblur, Mat &bblur, Mat &out, float d)
 { 
@@ -3343,6 +3365,8 @@ void simpleChessCorner_SIMD(Mat &img, Mat &out, float d)
     }
   }
 }
+
+#endif
 
 static inline int simplelienscore(Mat &img, int x, int y)
 { 
@@ -3969,7 +3993,7 @@ void calc_line_dirs(Mat &img1, Mat &paint)
 
 void line_dir_checker_score(Mat &img, Mat &paint)
 {
-  int dir_simp = 8;
+  const int dir_simp = 8;
   int r = 3;
   int b_range = 25/dir_simp;
   float scores[256/dir_simp];
@@ -4092,7 +4116,11 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
   checkers[lowest_scale_idx].create((*scales_border)[lowest_scale_idx].size(), CV_8UC1);
   //norm_avg_SIMD((*scales)[lowest_scale_idx], norms[lowest_scale_idx], marker_basesize);
   localHistCont((*scales_border)[lowest_scale_idx], norms[lowest_scale_idx], marker_basesize);
+#ifndef WIN32
   simpleChessCorner_SIMD(norms[lowest_scale_idx], checkers[lowest_scale_idx], chess_dist);
+#else
+  simpleChessCorner(norms[lowest_scale_idx], checkers[lowest_scale_idx], chess_dist);
+#endif
   
   
   for(float s=scale_min;marker_size_min<=2*marker_minsize*s && s>=detection_scale_min;s/=2)
@@ -4112,7 +4140,11 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
       checkers[scale_idx].create((*scales_border)[scale_idx].size(), CV_8UC1);
       //norm_avg_SIMD((*scales)[scale_idx], norms[scale_idx], marker_basesize);
       localHistCont((*scales_border)[scale_idx], norms[scale_idx], marker_basesize);
+#ifndef WIN32
       simpleChessCorner_SIMD(norms[scale_idx], checkers[scale_idx], chess_dist);
+#else
+      simpleChessCorner(norms[scale_idx], checkers[scale_idx], chess_dist);
+#endif
       
 #ifdef USE_SLOW_CORNERs
       Mat linedirs, checker_dir, checker_filtered;
