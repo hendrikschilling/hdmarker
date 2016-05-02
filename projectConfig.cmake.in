@@ -48,6 +48,8 @@ set(@PNU@_LIBRARY_DIRS "@PACKAGE_CMAKECONFIG_LINK@")
 set(@PNU@_LIBRARIES "@CMAKECONFIG_LIB@")
 set(@PNU@_FEATURES "@CMAKECONFIG_FEATURES@")
 set(@PNU@_FOUND false)
+set(@PROJECT_NAME@_FOUND false)
+
 
 
 #dependencies nicely packaged
@@ -152,6 +154,8 @@ endforeach()
 
 if (NOT @PNU@_MISSING)
   set(@PNU@_FOUND TRUE)
+  set(@PROJECT_NAME@_FOUND TRUE)
+  
   
   foreach(INCLUDE ${@PNU@_PACKAGES_INC})
     list(APPEND @PNU@_INCLUDE_DIRS ${${INCLUDE}})
@@ -170,11 +174,11 @@ else()
   set(@PNU@_LIBRARIES "")
   set(@PNU@_FEATURES "")
   set(@PNU@_FOUND FALSE)
+  set(@PROJECT_NAME@_FOUND FALSE)
   
-  message("@PNU@ missing dependencies")
+  message(WARNING "@PNU@ missing dependencies")
   foreach(L ${@PNU@_MISSING})
     message("   ${L}")
   endforeach()
-  message(FATAL_ERROR "stopping.")
 endif()
 
