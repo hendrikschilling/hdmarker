@@ -3537,7 +3537,7 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
 //
   corners2.resize(corners.size());
 #pragma omp parallel for
-  for (uint32_t ci=0;ci<corners.size();ci++) {
+  for (int ci=0;ci<corners.size();ci++) {
    // if (ci%500 == 0)
      // cout << ci << "estimated of" << corners.size() << " found " << markers.size() << "markers " <<endl;//<< "                  \r" << flush;
     int mask = 7;
@@ -3592,7 +3592,7 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
   
   //markers.resize(0);
 #pragma omp parallel for schedule(dynamic)
-  for (uint32_t i=0;i<candidates.size();i++) {
+  for (int i=0;i<candidates.size();i++) {
     //if (i%500 == 0)
       //cout << i << "/" << candidates.size() << " found " << markers.size() << "markers, scale " << scale << endl;//"                  \r" << flush;
     detect_marker((Marker_Corner*)candidates[i], checker, candidates, markers, imgs[scale_idx], small_hc_sb, scale);
