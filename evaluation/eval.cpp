@@ -73,7 +73,7 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
   Mat paint;
   Mat debug;
   Mat debug2;
-  hdmarker_detect_subpattern(gray, corners_rough, corners, 1, &unit_size_res, &paint);
+  hdmarker_detect_subpattern(gray, corners_rough, corners, 3, &unit_size_res, &paint);
   
   imwrite("points.tif", paint);
   debug.create(paint.size().height, paint.size().width, CV_8UC1);
@@ -90,6 +90,8 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
   std::vector<std::vector<Point3f>> wpoints_v;
   std::vector<std::vector<Point2f>> ipoints_v;
   
+  double rms = 0.0;
+  
   for(uint ci=0;ci<corners.size();ci++) {
     Matx41d p_w((double)corners[ci].id.x*unit_size_res, (double)corners[ci].id.y*unit_size_res, 0, 1);
     Matx31d p_c = world_to_cam*p_w;
@@ -105,10 +107,12 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
     Point2d d = Point2d(corners[ci].p.x, corners[ci].p.y) - p;
     
     
-    cout << p << "\n";
-    cout << corners[ci].p << " " << d << "\n\n";
+    //cout << p << "\n";
+    //cout << corners[ci].p << " " << d << "\n\n";
     
     diff += d;
+    
+    rms += d.x*d.x+d.y*d.y;
     
     circle(debug, p*16, 3, CV_RGB(255,255,255), -1, CV_AA, 4);
     circle(debug2, corners[ci].p*16, 3, CV_RGB(255,255,255), -1, CV_AA, 4);
@@ -118,6 +122,7 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
   }
   
   cout << "avg: " << diff*(1.0/corners.size()) << "\n";
+  cout << "rms: " << sqrt(rms*(1.0/corners.size())) << "\n";
   
   wpoints_v.push_back(wpoints);
   ipoints_v.push_back(ipoints);
