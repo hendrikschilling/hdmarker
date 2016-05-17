@@ -12,9 +12,11 @@ dep_lists_init()
 ## ENVIRONMENT
 #####################################################
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+  add_definitions(-DCOMPILER_CLANG_X86)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O3 -fno-omit-frame-pointer -fPIC -std=c++11 -march=native -fopenmp")
+  add_definitions(-DCOMPILER_GCC_X86)
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /noOy /W2 /EHsc /openmp")
 endif()

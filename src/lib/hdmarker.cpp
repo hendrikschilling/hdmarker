@@ -89,7 +89,7 @@ const float marker_corner_dir_rad_dist = M_PI/16*1.1;
 const float detection_scale_min = 0.5;
 const int post_detection_range = 5;
 const float corner_score_oversampling = 1;
-const int border = marker_maxsize*2;
+const int border = marker_maxsize*4;
 
 const Point2f b_o(border, border);
 
@@ -3486,8 +3486,8 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
   //float th = corner_threshold_high - (corner_threshold_high-corner_threshold_low)*max(min(effort,(float)1.0),(float)0.0);
 #pragma omp parallel for
 #ifdef USE_SLOW_CORNERs
-    for(int y=2*marker_maxsize;y<checker.size().height-2*marker_maxsize;y++)
-      for(int x=2*marker_maxsize;x<checker.size().width-2*marker_maxsize;x++)
+    for(int y=border;y<checker.size().height-border;y++)
+      for(int x=border;x<checker.size().width-border;x++)
 	if (checker.at<uchar>(y, x) > th /*&& simplelienscore(norms[scale_idx], x, y) >= linescore_min*/) {
 	  Point2f p = Point2f(x, y)*0.5;
 	  /*if (pattern_prescore(small_hc_sb, p, p+Point2f(0, 10)) >= prescore_corner_limit ||
@@ -3502,8 +3502,8 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
 	    corners.push_back(p-b_o);
 	}
 #else
-    for(int y=2*marker_maxsize;y<checker.size().height-2*marker_maxsize;y++)
-      for(int x=2*marker_maxsize;x<checker.size().width-2*marker_maxsize;x++)
+    for(int y=border;y<checker.size().height-border;y++)
+      for(int x=border;x<checker.size().width-border;x++)
 	if (checker.at<uchar>(y, x) > th && simplelienscore(norms[scale_idx], x, y) >= linescore_min) {
 	  Point2f p = Point2f(x, y);
 	  if (pattern_prescore(small_hc_sb, p, p+Point2f(0, 10)) >= prescore_corner_limit ||
@@ -4071,6 +4071,10 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
   allcorners.resize(512);
   allmarkers.resize(512);
   markers_raw.resize(0);
+  
+  assert(img.dims == 2);
+  assert(img.size().width >= 32);
+  assert(img.size().height >= 32);
   
   if (!marker_size_max)
     marker_size_max = max(img.size().height,  img.size().width);
