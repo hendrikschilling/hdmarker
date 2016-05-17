@@ -1,4 +1,8 @@
 #include <iostream>
+
+
+#include <metamat/mat.hpp>
+
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
@@ -12,6 +16,8 @@
 
 #include "hdmarker/hdmarker.hpp"
 #include "hdmarker/subpattern.hpp"
+
+#include <ucalib/proxy.hpp>
 
 using namespace cv;
 using namespace std;
@@ -160,5 +166,51 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
   
   //cout << "reverse:\n" << -rot.t()*trans << "\n";
 
+  
+  clif::Mat_<float> proxy({2, 33, 19});
+  proxy_backwards_poly_generate(proxy, ipoints, wpoints, Point2i(paint.size().width, paint.size().height));
+  
+  diff = Point2d(0,0);
+  rms = 0;
+  dirs.setTo(0);
+  
+  for(auto idx : clif::Idx_It_Dims(proxy,1,2)) {
+    if (isnan(proxy(0, idx[1], idx[2])))
+      continue;
+    
+    Matx41d p_w((double)proxy(0, idx[1], idx[2]), (double)proxy(1, idx[1], idx[2]), 0, 1);
+    Matx31d p_c = world_to_cam*p_w;
+    Matx31d p_ih = cam_to_img*p_c;
+    Point2d p(p_ih(0)/p_ih(2), p_ih(1)/p_ih(2));
+    
+    Point2d fit_p = Point2f((idx[1]+0.5)*paint.size().width/proxy[1],(idx[2]+0.5)*paint.size().height/proxy[2]);
+  
+  
+    //cout << corners[ci].id << "\n";
+    //cout << corners[ci].id.x*unit_size_res << " " << corners[ci].id.y*unit_size_res << "\n";
+    
+    p -= Point2d(0.5,0.5);
+    
+    Point2d d = fit_p - p;
+    
+    
+    //cout << p << "\n";
+    //cout << corners[ci].p << " " << d << "\n\n";
+    
+    line(dirs, p*16, (p+d*50)*16, CV_RGB(255,255,255), 1, CV_AA, 4);
+    
+    diff += d;
+    
+    rms += d.x*d.x+d.y*d.y;
+    
+    //circle(debug, p*16, 3, CV_RGB(255,255,255), -1, CV_AA, 4);
+    //circle(debug2, corners[ci].p*16, 3, CV_RGB(255,255,255), -1, CV_AA, 4);
+  }
+  
+  imwrite("dirs_proxy.tif", dirs);
+  
+  cout << "avg: " << diff*(1.0/corners.size()) << "\n";
+  cout << "rms: " << sqrt(rms*(1.0/corners.size())) << "\n";
+  
   return EXIT_SUCCESS;
 }
