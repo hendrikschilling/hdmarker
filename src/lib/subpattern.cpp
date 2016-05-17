@@ -464,7 +464,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
       }
   
   ceres::Solver::Options options;
-  options.max_num_iterations = 10;
+  options.max_num_iterations = 100;
   options.logging_type = ceres::LoggingType::SILENT;
   options.linear_solver_type = ceres::DENSE_NORMAL_CHOLESKY;
   options.preconditioner_type = ceres::IDENTITY;
@@ -503,15 +503,15 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   
   if (contrast <= min_fitted_contrast)
     return FLT_MAX;
-  if (params[4] <= -1 || params[4] >= 256)
+  if (params[4] < 0 || params[4] > 255)
     return FLT_MAX;
   if (abs(params[3]) >= size.x*max_sigma)
     return FLT_MAX;
   if (abs(params[3]) <= min_sigma_px)
     return FLT_MAX;
   
-  //if (retry_allowed) 
-    //return fit_gauss_direct(img, size, p, params, mask_2x2, false);
+  if (retry_allowed) 
+    return fit_gauss_direct(img, size, p, params, mask_2x2, false);
   
   return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt);
 }
