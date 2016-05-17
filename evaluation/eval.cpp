@@ -73,6 +73,7 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
   Mat paint;
   Mat debug;
   Mat debug2;
+  Mat dirs;
   hdmarker_detect_subpattern(gray, corners_rough, corners, 3, &unit_size_res, &paint);
   
   imwrite("points.tif", paint);
@@ -80,6 +81,8 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
   debug.setTo(0);
   debug2.create(paint.size().height, paint.size().width, CV_8UC1);
   debug2.setTo(0);
+  dirs.create(paint.size().height, paint.size().width, CV_8UC1);
+  dirs.setTo(0);
   
   
   Point2d diff(0,0);
@@ -110,6 +113,8 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
     //cout << p << "\n";
     //cout << corners[ci].p << " " << d << "\n\n";
     
+    line(dirs, p*16, (p+d*50)*16, CV_RGB(255,255,255), 1, CV_AA, 4);
+    
     diff += d;
     
     rms += d.x*d.x+d.y*d.y;
@@ -127,7 +132,7 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
   wpoints_v.push_back(wpoints);
   ipoints_v.push_back(ipoints);
   
-  imwrite("dirs.tif", paint);
+  imwrite("dirs.tif", dirs);
   imwrite("debug.tif", debug);
   imwrite("debug2.tif", debug2);
   

@@ -958,8 +958,9 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   }
 }
 
-void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size, Mat *paint, bool *mask_2x2, int page, const cv::Rect limit)
+void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size, Mat *paint, bool *mask_2x2, int page, const cv::Rect limit, int flags)
 {
+  int keep;
   bool checkrange = true;
   
   vector<Corner> ca, cb, all;
@@ -998,10 +999,13 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
   
   
   //FIXME what if we don't detect enough in this step?
+  keep = 0;
+  if (flags & KEEP_ALL_LEVELS)
+    keep = corners_out.size();
   
-  for(int i=0;i<corners_out.size();i++)
+  for(int i=0;i<keep;i++)
     corners_out[i].id *= 10;
-  corners_out.resize(corners_out.size()+cb.size());
+  corners_out.resize(keep+cb.size());
   for(int i=0;i<cb.size();i++)
     corners_out[corners_out.size()-cb.size()+i] = cb[i];
   
@@ -1017,9 +1021,14 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
       break;
     }
     mul *= 5;
-    for(int i=0;i<corners_out.size();i++)
+    
+    keep = 0;
+    if (flags & KEEP_ALL_LEVELS)
+      keep = corners_out.size();
+    
+    for(int i=0;i<keep;i++)
       corners_out[i].id *= 5;
-    corners_out.resize(corners_out.size()+cb.size());
+    corners_out.resize(keep+cb.size());
     for(int i=0;i<cb.size();i++)
       corners_out[corners_out.size()-cb.size()+i] = cb[i];
     
