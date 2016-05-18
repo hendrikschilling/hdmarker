@@ -57,29 +57,23 @@ int main(int argc, char* argv[])
             0.0000,  0.7071,  0.7071,  -5.661583810168157,
              0.0000, -0.7071,  0.7071,  22.62450874187406);*/
   
-Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
+/*Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
                      -0.16547957,  0.5715158,   0.80373275, -6.13332222,
-                    0.27313116, -0.75653219,  0.59418726, 20.48268994);
+                    0.27313116, -0.75653219,  0.59418726, 20.48268994);*/
 
-
+  Mat rot_ref = read_double_m("rot.txt", 3, 3);
+  rot_ref.at<double>(0, 1) *= -1;
+  rot_ref.at<double>(0, 2) *= -1;
+  rot_ref.at<double>(1, 0) *= -1;
+  rot_ref.at<double>(2, 0) *= -1;
+  
+  Mat trans_ref = read_double_m("trans.txt", 3, 1);
+  trans_ref.at<double>(0) *= -1;
+  
   
   Matx33d cam_to_img(2100.0000,    0.0000, 960.0000,
                0.0000, 2100.0000, 540.0000,
               0.0000,    0.0000,   1.0000);
-                       
-  cout << world_to_cam << "\n";  
-  
-  Matx41d p_w(8.0, 8.0, 0.0, 1.0);
-
-  
-  Matx31d p_c = world_to_cam*p_w;
-  Matx31d p_i = cam_to_img*p_c;
-  
-  
-  cout << p_c << "\n";
-  cout << p_i << "\n";
-  
-  printf("pos: %fx%f\n", p_i(0)/p_i(2), p_i(1)/p_i(2));
   
   std::vector<Corner> corners_rough;
   std::vector<Corner> corners;
@@ -119,8 +113,9 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
   double rms = 0.0;
   
   for(uint ci=0;ci<corners.size();ci++) {
-    Matx41d p_w((double)corners[ci].id.x*unit_size_res, (double)corners[ci].id.y*unit_size_res, 0, 1);
-    Matx31d p_c = world_to_cam*p_w;
+    Matx31d p_w((double)corners[ci].id.x*unit_size_res, (double)corners[ci].id.y*unit_size_res, 0);
+    Matx31d p_c = Matx33d(rot_ref)*p_w;
+    p_c += Matx31d(trans_ref);
     Matx31d p_ih = cam_to_img*p_c;
     Point2d p(p_ih(0)/p_ih(2), p_ih(1)/p_ih(2));
   
@@ -180,16 +175,6 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
   cout << "rotmat:\n" << rot << "\n";
   cout << "trans:\n" << trans << "\n";
   
-  
-  Mat rot_ref = read_double_m("rot.txt", 3, 3);
-  rot_ref.at<double>(0, 1) *= -1;
-  rot_ref.at<double>(0, 2) *= -1;
-  rot_ref.at<double>(1, 0) *= -1;
-  rot_ref.at<double>(2, 0) *= -1;
-  
-  Mat trans_ref = read_double_m("trans.txt", 3, 1);
-  trans_ref.at<double>(0) *= -1;
-  
   cout << "rot ref:\n" << rot_ref << "\n";
   cout << "rot diff:\n" << rot-rot_ref << "\n";
   cout << "trans ref:\n" << trans_ref << "\n";
@@ -210,8 +195,10 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
     if (isnan(proxy(0, idx[1], idx[2])))
       continue;
     
-    Matx41d p_w((double)proxy(0, idx[1], idx[2]), (double)proxy(1, idx[1], idx[2]), 0, 1);
-    Matx31d p_c = world_to_cam*p_w;
+    Matx31d p_w((double)proxy(0, idx[1], idx[2]), (double)proxy(1, idx[1], idx[2]), 0);
+    Matx31d p_c = Matx33d(rot_ref)*p_w;
+    p_c += Matx31d(trans_ref);
+    
     Matx31d p_ih = cam_to_img*p_c;
     Point2d p(p_ih(0)/p_ih(2), p_ih(1)/p_ih(2));
     
