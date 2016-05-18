@@ -80,7 +80,7 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
   Mat debug;
   Mat debug2;
   Mat dirs;
-  hdmarker_detect_subpattern(gray, corners_rough, corners, 3, &unit_size_res, &paint);
+  hdmarker_detect_subpattern(gray, corners_rough, corners, 2, &unit_size_res, &paint);
   
   imwrite("points.tif", paint);
   debug.create(paint.size().height, paint.size().width, CV_8UC1);
@@ -168,7 +168,7 @@ Matx34d world_to_cam(0.94763702, 0.31785029,  -0.03090816, -10.84295086,
 
   
   clif::Mat_<float> proxy({2, 33, 19});
-  proxy_backwards_poly_generate(proxy, ipoints, wpoints, Point2i(paint.size().width, paint.size().height));
+  proxy_backwards_pers_poly_generate(proxy, ipoints, wpoints, Point2i(paint.size().width, paint.size().height));
   
   diff = Point2d(0,0);
   rms = 0;
