@@ -39,8 +39,109 @@ Mat read_double_m(string path, int rows, int cols)
   return out;
 }
 
+#define PATTERN_CHECKER 0
+#define PATTERN_HDMARKER 1
+
+void detect_pattern(cv::Mat &img, int pattern_type, std::vector<cv::Point2f> &ipoints, std::vector<cv::Point3f> &wpoints)
+{
+  //FIXME load hardcoded values from config file?
+  if (pattern_type == PATTERN_CHECKER) {
+    ipoints.resize(0);
+    wpoints.resize(0);
+    findChessboardCorners(img, cv::Size(15, 9), ipoints, CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_NORMALIZE_IMAGE);
+    if (!ipoints.size())
+      return;
+    //cornerSubPix(img, ipoints,  cv::Size(15, 15), cv::Size(-1, -1), TermCriteria( CV_TERMCRIT_EPS, 40, 0.001 ));
+    printf("opencv found %d checker corners\n", ipoints.size());
+    for(int j=0;j<9;j++)
+      for(int i=0;i<15;i++) {
+        wpoints.push_back(Point3f((14-i)+2, (8-j)+6, 0));
+        printf("%dx%d = %fx%f\n", i, j, ipoints[j*15+i].x, ipoints[j*15+i].y);
+      }
+  }
+  else {
+    std::vector<Corner> corners_rough;
+    std::vector<Corner> corners;
+    double unit_size_res = 1.0;
+    
+    Marker::detect(img, corners_rough);
+    
+    if (!corners_rough.size())
+      return;
+    
+    hdmarker_detect_subpattern(img, corners_rough, corners, 3, &unit_size_res);
+    
+    for(uint ci=0;ci<corners.size();ci++) {    
+      wpoints.push_back(Point3f(corners[ci].id.x*unit_size_res,corners[ci].id.y*unit_size_res, 0));
+      ipoints.push_back(Point2f(corners[ci].p.x, corners[ci].p.y));
+    }
+  }
+}
+
+void normalize_rot(cv::Mat &rot_v)
+{
+  double rot = norm(rot_v);
+  if (rot > M_PI*0.5) {
+    double newrot = M_PI-rot;
+    rot_v *= -newrot/rot;
+  }
+}
+
+void eval_pnp(std::vector<cv::Point2f> &ipoints, std::vector<cv::Point3f> &wpoints, const Matx33d &cam_to_img, const cv::Mat &rot_ref, const cv::Mat &trans_ref, const cv::Size img_size, const std::string prefix = std::string())
+{
+  Mat r_m;
+  Rodrigues(rot_ref, r_m);
+  
+  if (!ipoints.size())
+    return;
+  
+  double rms = 0.0;
+  Point2d diff(0, 0);
+  
+  for(uint i=0;i<wpoints.size();i++) {
+    Matx31d p_w(wpoints[i].x, wpoints[i].y, wpoints[i].z);
+    Matx31d p_c = Matx33d(r_m)*p_w;
+    p_c += Matx31d(trans_ref);
+    Matx31d p_ih = cam_to_img*p_c;
+    Point2d p(p_ih(0)/p_ih(2), p_ih(1)/p_ih(2));
+
+    p -= Point2d(0.5,0.5);
+    
+    Point2d d = Point2d(ipoints[i]) - p;
+
+    //line(dirs, p*16, (p+d*50)*16, CV_RGB(255,255,255), 1, CV_AA, 4);
+    
+    diff += d;
+    
+    rms += d.x*d.x+d.y*d.y;
+    
+    //circle(debug, p*16, 3, CV_RGB(255,255,255), -1, CV_AA, 4);
+    //circle(debug2, corners[ci].p*16, 3, CV_RGB(255,255,255), -1, CV_AA, 4);
+  }
+  
+  cout << prefix << " avg: " << diff*(1.0/wpoints.size()) << "\n";
+  cout << prefix << " rms: " << sqrt(rms*(1.0/wpoints.size())) << "\n";
+  
+  Mat rot;
+  Mat trans;
+  solvePnP(wpoints, ipoints, cam_to_img, noArray(), rot, trans, false);
+  
+  //normalize_rot(rot);
+  
+  cout << "\n" << "rot ref:\n" << rot_ref << "\n";
+  cout << "trans ref:\n" << trans_ref << "\n";
+  
+  cout << "rot:\n" << rot << "\n";
+  cout << "trans:\n" << trans << "\n";
+  
+  cout << "trans diff:\n" << trans-trans_ref << "\n";
+  cout << "rot diff:\n" << rot-rot_ref << "\n";
+}
+
 int main(int argc, char* argv[])
 {  
+  std::vector<Point3f> wpoints;
+  std::vector<Point2f> ipoints;
   /*Matx34d world_to_cam(-0.0000, -1.0000,  0.0000,  10.1065,
                        -0.8937,  0.0000,  0.4488,   8.2506,
                         0.4488, -0.0000,  0.8937, -13.6151);*/
@@ -62,10 +163,9 @@ int main(int argc, char* argv[])
                     0.27313116, -0.75653219,  0.59418726, 20.48268994);*/
 
   Mat rot_ref = read_double_m("rot.txt", 3, 3);
-  rot_ref.at<double>(0, 1) *= -1;
-  rot_ref.at<double>(0, 2) *= -1;
-  rot_ref.at<double>(1, 0) *= -1;
-  rot_ref.at<double>(2, 0) *= -1;
+  Rodrigues(rot_ref, rot_ref);
+  rot_ref.at<double>(1) *= -1;
+  rot_ref.at<double>(2) *= -1;
   
   Mat trans_ref = read_double_m("trans.txt", 3, 1);
   trans_ref.at<double>(0) *= -1;
@@ -83,9 +183,48 @@ int main(int argc, char* argv[])
   
   Mat gray = imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
   
+  /*std::vector<cv::Point2f> ipoints;
+  std::vector<cv::Point3f> wpoints;
+  findChessboardCorners(gray, cv::Size(15, 9), ipoints, CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_NORMALIZE_IMAGE);
+  //cornerSubPix(gray, ipoints,  cv::Size(15, 15), cv::Size(-1, -1), TermCriteria( CV_TERMCRIT_EPS, 40, 0.001 ));
+  printf("opencv found %d checker corners\n", ipoints.size());
+  for(int j=0;j<9;j++)
+    for(int i=0;i<15;i++)
+      wpoints.push_back(Point3f(i+2, j+6, 0));
+    
+    
+  Mat rot;
+  Rodrigues(rot_ref, rot);
+  Mat trans = trans_ref.clone();
+  trans.setTo(-10);
+  trans.at<double>(2) = -10;
+  
+  solvePnP(wpoints, ipoints, cam_to_img, noArray(), rot, trans, true);
+  
+  Mat dist;
+  
+  std::vector<Mat> rmats;
+  std::vector<Mat> tmats;
+  
+  Rodrigues(rot, rot);
+  
+  cout << "rotmat:\n" << rot << "\n";
+  cout << "trans:\n" << trans << "\n";
+  
+  cout << "rot ref:\n" << rot_ref << "\n";
+  cout << "rot diff:\n" << rot-rot_ref << "\n";
+  cout << "trans ref:\n" << trans_ref << "\n";
+  cout << "trans diff:\n" << trans-trans_ref << "\n";*/
+  
   Marker::init();
   
-  Marker::detect(gray, corners_rough);
+  detect_pattern(gray, PATTERN_CHECKER, ipoints, wpoints);
+  eval_pnp(ipoints, wpoints, cam_to_img, rot_ref, trans_ref, gray.size());
+  
+  detect_pattern(gray, PATTERN_HDMARKER, ipoints, wpoints);
+  eval_pnp(ipoints, wpoints, cam_to_img, rot_ref, trans_ref, gray.size());
+  
+  /*Marker::detect(gray, corners_rough);
   Mat paint;
   Mat debug;
   Mat debug2;
@@ -243,7 +382,7 @@ int main(int argc, char* argv[])
   
   
   cout << "r diff:\n" << rot-rot_ref << "\n";
-  cout << "t diff:\n" << trans - trans_ref << "\n";
+  cout << "t diff:\n" << trans - trans_ref << "\n";*/
   
   return EXIT_SUCCESS;
 }
