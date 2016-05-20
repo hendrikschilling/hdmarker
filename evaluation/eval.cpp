@@ -48,15 +48,15 @@ void detect_pattern(cv::Mat &img, int pattern_type, std::vector<cv::Point2f> &ip
   if (pattern_type == PATTERN_CHECKER) {
     ipoints.resize(0);
     wpoints.resize(0);
-    findChessboardCorners(img, cv::Size(15, 9), ipoints, CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_NORMALIZE_IMAGE);
+    findChessboardCorners(img, cv::Size(11, 5), ipoints, CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_NORMALIZE_IMAGE);
     if (!ipoints.size())
       return;
-    //cornerSubPix(img, ipoints,  cv::Size(15, 15), cv::Size(-1, -1), TermCriteria( CV_TERMCRIT_EPS, 40, 0.001 ));
+    cornerSubPix(img, ipoints,  cv::Size(11, 11), cv::Size(-1, -1), TermCriteria( CV_TERMCRIT_EPS, 40, 0.001 ));
     printf("opencv found %d checker corners\n", ipoints.size());
-    for(int j=0;j<9;j++)
-      for(int i=0;i<15;i++) {
-        wpoints.push_back(Point3f((14-i)+2, (8-j)+6, 0));
-        printf("%dx%d = %fx%f\n", i, j, ipoints[j*15+i].x, ipoints[j*15+i].y);
+    for(int j=0;j<5;j++)
+      for(int i=0;i<11;i++) {
+        wpoints.push_back(Point3f(i+5, j+9, 0));
+        ipoints[j*11+i] += Point2f(0.5,0.5);
       }
   }
   else {
@@ -73,7 +73,7 @@ void detect_pattern(cv::Mat &img, int pattern_type, std::vector<cv::Point2f> &ip
     
     for(uint ci=0;ci<corners.size();ci++) {    
       wpoints.push_back(Point3f(corners[ci].id.x*unit_size_res,corners[ci].id.y*unit_size_res, 0));
-      ipoints.push_back(Point2f(corners[ci].p.x, corners[ci].p.y));
+      ipoints.push_back(Point2f(corners[ci].p.x, corners[ci].p.y)+Point2f(0.485,0.485));
     }
   }
 }
@@ -95,6 +95,8 @@ void eval_pnp(std::vector<cv::Point2f> &ipoints, std::vector<cv::Point3f> &wpoin
   if (!ipoints.size())
     return;
   
+  printf("using %d calibration points\n", ipoints.size());
+  
   double rms = 0.0;
   Point2d diff(0, 0);
   
@@ -104,8 +106,6 @@ void eval_pnp(std::vector<cv::Point2f> &ipoints, std::vector<cv::Point3f> &wpoin
     p_c += Matx31d(trans_ref);
     Matx31d p_ih = cam_to_img*p_c;
     Point2d p(p_ih(0)/p_ih(2), p_ih(1)/p_ih(2));
-
-    p -= Point2d(0.5,0.5);
     
     Point2d d = Point2d(ipoints[i]) - p;
 
