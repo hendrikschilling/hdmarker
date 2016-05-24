@@ -27,14 +27,14 @@ static const float recurse_min_len = 3.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 2;
 static const float extent_range_limit_size = 8;
-static const double subfit_max_range = 0.2;
+static const double subfit_max_range = 0.1;
 static const double fit_gauss_max_tilt = 2.0;
 static const float max_size_diff = 1.0;
 
 static int safety_border = 2;
 
-static const double bg_weight = 0.5;
-static const double s2_mul = sqrt(1.0);
+static const double bg_weight = 0.2;
+static const double s2_mul = sqrt(0.5);
 static const double tilt_max_rms_penalty = 9.0;
 static const double border_frac = 0.15;
 
@@ -45,7 +45,7 @@ static const float max_sigma = 0.25;
 static const float min_sigma_px = 0.65;
 //FIXME add possibility to reject too small sigma (less than ~one pixel (or two for bayer))
 
-static const int min_fit_data_points = 9;
+static const int min_fit_data_points = 16;
 
 
 class SimpleCloud2d
@@ -476,8 +476,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   //std::cout << summary.FullReport() << "\n";
   
   ceres::Problem problem_gauss_plane;
-  for(y=area.y-1;y<=area.br().y;y++)
-    for(x=area.x-1;x<=area.br().x;x++) 
+  for(y=area.y;y<=area.br().y;y++)
+    for(x=area.x;x<=area.br().x;x++) 
       if (!mask_2x2 || mask_2x2[(y%2)*2+(x%2)]) {
         double x2 = x-p.x;
         double y2 = y-p.y;
@@ -494,11 +494,15 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   p.x += sin(params[0])*(size.x*subfit_max_range);
   p.y += sin(params[1])*(size.y*subfit_max_range);
 
-  
   //minimal possible contrast
   double contrast = abs(params[2]-params[4])*exp(-(0.25/(2.0*params[3]*params[3])+0.25/(2.0*params[3]*params[3])));
   contrast = std::min(255.0, contrast);
   
+  /*qif (norm(p-Point2f(166.5,1005.5))<1) {
+    std::cout << summary.FullReport() << "\n";
+    printf("final rms: %f\n", sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt));
+    abort();
+  }*/
   
   if (contrast <= min_fitted_contrast)
     return FLT_MAX;
@@ -698,7 +702,6 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
           continue;
         }
         
-        
         Corner c_o(refine_p, extr_id, 0);
         Interpolated_Corner c_i(extr_id, refine_p, false);
         c_i.size = sqrt(norm(c.p-c_o.p)*norm(c.p-c_o.p) / (sy*sy + sx*sx))*2/idx_step;
@@ -708,15 +711,20 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
 #pragma omp critical (_paint_)
         {
           draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(c_i.size, c_i.size), params);
-          /*char buf[64];
+          char buf[64];
           sprintf(buf, "%d",extr_id.x);
           putText(*paint, buf, refine_p, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
           sprintf(buf, "%d",extr_id.y);
-          putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));*/
+          putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
         }
           
 #pragma omp critical
         {
+          if (extr_id.x == 29 && extr_id.y == 147 && int(c_i.p.y) == 1005)  {
+            printf("add %fx%f (%dx%d) from %fx%f (%dx%d) and %fx%f\n", c_i.p.x,c_i.p.y,extr_id.x,extr_id.y,c.p.x,c.p.y,c.id.x,c.id.y,second.x,second.y);
+              imwrite("fitted.tif", *paint);
+            abort();
+          }
           if (corners_out_map.count(id_to_key(extr_id)) != 0) {
             Interpolated_Corner c_i_old = corners_out_map[id_to_key(extr_id)];
             assert(c_i_old.id == c_i.id);
@@ -915,11 +923,11 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
           if (paint) {
             draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(minlen*0.2, minlen*0.2), params);
             Point2i extr_id(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset);
-            /*char buf[64];
+            char buf[64];
             sprintf(buf, "%d",extr_id.x);
             putText(*paint, buf, refine_p, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
             sprintf(buf, "%d",extr_id.y);
-            putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));*/
+            putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
           }
             
             Corner c_o(refine_p, Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), 0);
@@ -944,7 +952,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
     std::sort(corners_out.begin(), corners_out.end(), corner_cmp);
     for(int r=1;r<=int_extend_range;r++) {
       int found = corners_out.size();
-      while (found > (corners_out.size()-found)*0.01 || (found && r == int_extend_range)) {
+      while (found > (corners_out.size()-found)*0.01 || (found > 1 && r == int_extend_range)) {
         //hdmarker_subpattern_checkneighbours results depend on corner ordering - make repeatable for threading!
         found = hdmarker_subpattern_checkneighbours(img, corners_out, corners_out, blacklist, blacklist_neighbours, 2, r, points, paint, mask_2x2, checkrange, limit);
         std::sort(corners_out.begin(), corners_out.end(), corner_cmp);
