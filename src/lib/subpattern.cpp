@@ -289,7 +289,7 @@ struct Gauss2dPlaneDirectError {
     x2 = x2*x2;
     y2 = y2*y2;
 
-    residuals[0] = (T(val_) - (p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-(x2/sx2+y2/sx2))))*T(sw_);
+    residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-(x2/sx2+y2/sx2))))+1e-12)*T(sw_);
     
     return true;
   }
