@@ -767,6 +767,208 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
   return added;
 }
 
+int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corners, vector<Corner> &corners_out, IntCMap &blacklist_rec, IntCLMap &blacklist, int idx_step, int int_extend_range, SimpleCloud2d &points, Mat *paint = NULL, bool *mask_2x2 = NULL, bool checkrange = false, const cv::Rect limit = Rect())
+{
+  int counter = 0;
+  int added = 0;
+  int checked = 0;
+  int skipped = 0;
+  
+  IntCMap corners_map;
+  IntCMap corners_out_map;
+  
+  for(int i=0;i<corners.size();i++) {
+    Corner c = corners[i];
+    Interpolated_Corner c_i(c);
+    corners_map[id_to_key(corners[i].id)] = c_i;
+  }
+  
+  int done = 0;
+  
+#pragma omp parallel for schedule(dynamic, 8)
+  for(int i=0;i<corners.size();i++) {
+    Corner c;
+    
+    c = corners[i];
+  
+#pragma omp atomic 
+    done++;
+
+    int extend_range = int_extend_range;
+    
+    if (c.size < extent_range_limit_size)
+      extend_range = 1;
+          
+    for(int sy=-extend_range;sy<=extend_range;sy++)
+      for(int sx=-extend_range;sx<=extend_range;sx++) {
+        
+        Point2i extr_id = Point2i(c.id)-Point2i(sx,sy)*idx_step;
+        
+        if (!check_limit(extr_id, checkrange, limit))
+          continue;
+        
+        bool do_continue = false;
+        if (corners_map.find(id_to_key(extr_id)) != corners_map.end())
+          continue;
+        
+        //range from which to collect calibration points
+        
+        std::vector<Point2f> local_ids;
+        std::vector<Point2f> local_points;
+        
+        float avg_size = 0.0;
+        int c_range = max(abs(sx),abs(sy))*3;
+        for(int csy=-c_range;csy<=c_range;csy++)
+          for(int csx=-c_range;csx<=c_range;csx++) {
+            Point2i search_id = Point2i(c.id)+Point2i(csx,csy)*idx_step;
+            IntCMap::iterator it = corners_map.find(id_to_key(search_id));
+            //FIXME size calculation might be off for heavily tilted targets...
+            if (it == corners_map.end())
+              continue;
+            else {
+              assert(it->second.id == search_id);
+              local_ids.push_back(it->second.id);
+              local_points.push_back(it->second.p);
+            }
+          }
+        
+        //FIXME IMPORTANT check for degenerate sample distributions!
+        if (local_ids.size() <= 10) {
+          //printf("only found %d points within range!\n", local_ids.size());
+          continue;
+        }
+        
+//         if (is_diff_larger(it->second.size, c.size, max_size_diff)) {
+//           continue;
+//         }
+
+#pragma omp critical
+        if (corners_out_map.count(id_to_key(extr_id)) && corners_out_map[id_to_key(extr_id)].dist_searched < int_extend_range)
+          do_continue = true;
+        if (do_continue)
+          continue;
+        
+        Mat pers = findHomography(local_ids, local_points);
+        if (pers.empty())
+          abort();
+        std::vector<Point2f> target_id;
+        std::vector<Point2f> refine_points;
+        target_id.push_back(extr_id);
+        
+        perspectiveTransform(target_id, refine_points, pers);
+        
+        Point2f refine_p = refine_points[0];
+        //FIXME IMPORTANT calculate a size (from perspective transform?
+        float maxlen = c.size*5;
+
+        const std::vector<Point2f> *tried = NULL;
+        
+#pragma omp critical (__blacklist__)
+        if (blacklist.count(id_to_key(extr_id)))
+          tried = &blacklist[id_to_key(extr_id)];
+        
+        if (tried)
+          for(int i=0;i<tried->size();i++) {
+            Point2f d = (*tried)[i]-refine_p;
+            if (d.x*d.x+d.y*d.y < max_retry_dist*max_retry_dist*maxlen*maxlen) {
+              do_continue = true;
+#pragma omp atomic
+              skipped++;
+              break;
+            }
+          }
+
+        if (do_continue)
+          continue;
+    
+        
+#pragma omp critical
+        {
+          if (!points.CheckRad(refine_p, 2, extr_id)) {
+            imwrite("fitted.tif", *paint);
+            abort();
+          }
+        }
+        
+        if (!p_area_in_img_border(img, refine_p, maxlen*0.2)
+          || is_diff_larger(maxlen*0.2, c.size, max_size_diff)) {
+            Interpolated_Corner c_i(extr_id, refine_p, false);
+          continue;
+        }
+        
+        double params[7];
+        Point2f p_cp = refine_p;
+#pragma omp atomic
+        checked++;
+        double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, params, mask_2x2);
+        
+        if (rms >= rms_use_limit*min(maxlen*0.2,10.0)) {
+            Interpolated_Corner c_i(extr_id, refine_p, false);
+#pragma omp critical (__blacklist__)
+            blacklist[id_to_key(extr_id)].push_back(p_cp);
+          continue;
+        }
+        
+        Corner c_o(refine_p, extr_id, 0);
+        Interpolated_Corner c_i(extr_id, refine_p, false);
+        c_i.size = sqrt(norm(c.p-c_o.p)*norm(c.p-c_o.p) / (sy*sy + sx*sx))*2/idx_step;
+        c_i.dist_searched = int_extend_range;
+        
+        if (paint) 
+#pragma omp critical (_paint_)
+        {
+          draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(c_i.size, c_i.size), params);
+          char buf[64];
+          sprintf(buf, "%d",extr_id.x);
+          putText(*paint, buf, refine_p, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
+          sprintf(buf, "%d",extr_id.y);
+          putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
+        }
+          
+#pragma omp critical
+        {
+          if (corners_out_map.count(id_to_key(extr_id)) != 0) {
+            Interpolated_Corner c_i_old = corners_out_map[id_to_key(extr_id)];
+            assert(c_i_old.id == c_i.id);
+            //FIXME use rms score!
+            if (pointf_cmp(c_i_old.p, c_i.p)) {
+              corners_out_map[id_to_key(extr_id)] = c_i;
+            }
+          }
+          else {
+            added++;
+            if (!points.CheckRad(refine_p, 2, extr_id)) {
+              imwrite("fitted.tif", *paint);
+              abort();
+            }
+            points.add(extr_id, Point2i(c_i.p.x+0.5, c_i.p.y+0.5));
+            corners_out_map[id_to_key(extr_id)] = c_i;
+            //FIXME add same corner multiple times if found from different direction?
+            //corners_out.push_back(c_o);
+          }
+        }
+        //else
+        //count multiply found processed points?
+      }
+      
+      if (done % ((corners.size()/100)+1) == 0)
+#pragma omp critical(__print__)
+        printprogress(done, corners.size(), counter, " %d corners, range %d, added %d checked %d skipped %d", corners.size(), int_extend_range, added, checked, skipped);
+  }
+  
+  //FIXME push all corners from corners_out_map
+  //corners_out.push_back(c_o);
+  for(auto it=corners_out_map.begin();it!=corners_out_map.end();++it) {
+    Corner c_o(it->second.p, it->second.id, 0);
+    c_o.size = it->second.size;
+    corners_out.push_back(c_o);
+  }
+  
+  printf("added %d corners\n", added);
+  
+  return added;
+}
+
 void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours, Mat *paint, bool *mask_2x2, int page, bool checkrange, const cv::Rect limit, bool show_progress = false)
 {  
   int counter = 0;
@@ -954,7 +1156,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
       int found = corners_out.size();
       while (found > (corners_out.size()-found)*0.01 || (found > 1 && r == int_extend_range)) {
         //hdmarker_subpattern_checkneighbours results depend on corner ordering - make repeatable for threading!
-        found = hdmarker_subpattern_checkneighbours(img, corners_out, corners_out, blacklist, blacklist_neighbours, 2, r, points, paint, mask_2x2, checkrange, limit);
+        found = hdmarker_subpattern_checkneighbours_pers(img, corners_out, corners_out, blacklist, blacklist_neighbours, 2, r, points, paint, mask_2x2, checkrange, limit);
         std::sort(corners_out.begin(), corners_out.end(), corner_cmp);
         if (found > (corners_out.size()-found)*0.01) {
           r = 1;
