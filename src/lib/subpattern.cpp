@@ -29,7 +29,7 @@ static const int int_extend_range = 2;
 static const float extent_range_limit_size = 8;
 static const double subfit_max_range = 0.1;
 static const double fit_gauss_max_tilt = 2.0;
-static const float max_size_diff = 1.0;
+static const float max_size_diff = 0.5;
 
 static int safety_border = 2;
 
@@ -42,7 +42,7 @@ static const float max_retry_dist = 0.1;
 
 static const float fit_size_min = 5.0;
 static const float max_sigma = 0.25;
-static const float min_sigma_px = 0.65;
+static const float min_sigma_px = 0.45;
 //FIXME add possibility to reject too small sigma (less than ~one pixel (or two for bayer))
 
 static const int min_fit_data_points = 16;
@@ -407,8 +407,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   
   int min_v = 255;
   int max_v = 0;
-  for(y=area.y;y<=area.br().y;y++)
-    for(x=area.x;x<=area.br().x;x++)
+  for(y=area.y+1;y<=area.br().y-1;y++)
+    for(x=area.x+1;x<=area.br().x-1;x++)
     if (!mask_2x2 || mask_2x2[(y%2)*2+(x%2)]) {
       min_v = std::min<int>(ptr[y*w+x],min_v);
       max_v = std::max<int>(ptr[y*w+x],max_v);
@@ -498,7 +498,10 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   double contrast = abs(params[2]-params[4])*exp(-(0.25/(2.0*params[3]*params[3])+0.25/(2.0*params[3]*params[3])));
   contrast = std::min(255.0, contrast);
   
-  /*qif (norm(p-Point2f(166.5,1005.5))<1) {
+  /*if (size.x <= 5 && params[2] < params[4] )
+    printf("contrast %f\n", contrast);*/
+  
+  /*if (norm(p-Point2f(933.0,555.0))<2) {
     std::cout << summary.FullReport() << "\n";
     printf("final rms: %f\n", sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt));
     abort();
@@ -557,7 +560,7 @@ void addcorners(Rect_<float> area, Point2f c)
 
 bool is_diff_larger(float a, float b, float th)
 {
-  if (max(a/b,b/a) >= 1.0 +th) {
+  if (max(a/b,b/a) >= 1.0 + th) {
     return true;
   }
   else
@@ -711,11 +714,11 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
 #pragma omp critical (_paint_)
         {
           draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(c_i.size, c_i.size), params);
-          char buf[64];
+          /*char buf[64];
           sprintf(buf, "%d",extr_id.x);
           putText(*paint, buf, refine_p, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
           sprintf(buf, "%d",extr_id.y);
-          putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
+          putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));*/
         }
           
 #pragma omp critical
@@ -851,15 +854,19 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         Mat pers = findHomography(local_ids, local_points);
         if (pers.empty())
           abort();
-        std::vector<Point2f> target_id;
-        std::vector<Point2f> refine_points;
-        target_id.push_back(extr_id);
+        /*std::vector<Point3f> target_id;
+        std::vector<Point3f> refine_points;
+        target_id.push_back(Point3f(extr_id.x, extr_id.y, 1));
         
         perspectiveTransform(target_id, refine_points, pers);
         
-        Point2f refine_p = refine_points[0];
-        //FIXME IMPORTANT calculate a size (from perspective transform?
-        float maxlen = c.size*5;
+        Point2f refine_p(refine_points[0].x/refine_points[0].z,refine_points[0].y/refine_points[0].z);*/
+        
+        Matx31f projected = Matx33f(pers)*Matx31f(extr_id.x, extr_id.y, 1);
+        Matx31f p_scale = Matx33f(pers)*Matx31f(1, 1, 0);
+        Point2f refine_p(projected(0)/projected(2),projected(1)/projected(2));
+        
+        float size = norm(Point2f(pers.at<double>(0,0),pers.at<double>(1,1)));
 
         const std::vector<Point2f> *tried = NULL;
         
@@ -870,7 +877,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         if (tried)
           for(int i=0;i<tried->size();i++) {
             Point2f d = (*tried)[i]-refine_p;
-            if (d.x*d.x+d.y*d.y < max_retry_dist*max_retry_dist*maxlen*maxlen) {
+            if (d.x*d.x+d.y*d.y < max_retry_dist*max_retry_dist*size*5*size*5) {
               do_continue = true;
 #pragma omp atomic
               skipped++;
@@ -890,8 +897,8 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
           }
         }
         
-        if (!p_area_in_img_border(img, refine_p, maxlen*0.2)
-          || is_diff_larger(maxlen*0.2, c.size, max_size_diff)) {
+        if (!p_area_in_img_border(img, refine_p, size)
+          || is_diff_larger(size, c.size, max_size_diff)) {
             Interpolated_Corner c_i(extr_id, refine_p, false);
           continue;
         }
@@ -900,9 +907,9 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         Point2f p_cp = refine_p;
 #pragma omp atomic
         checked++;
-        double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, params, mask_2x2);
+        double rms = fit_gauss_direct(img, Point2f(size, size), refine_p, params, mask_2x2);
         
-        if (rms >= rms_use_limit*min(maxlen*0.2,10.0)) {
+        if (rms >= rms_use_limit*min(size,10.0f)) {
             Interpolated_Corner c_i(extr_id, refine_p, false);
 #pragma omp critical (__blacklist__)
             blacklist[id_to_key(extr_id)].push_back(p_cp);
@@ -918,11 +925,11 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
 #pragma omp critical (_paint_)
         {
           draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(c_i.size, c_i.size), params);
-          char buf[64];
+          /*char buf[64];
           sprintf(buf, "%d",extr_id.x);
           putText(*paint, buf, refine_p, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
           sprintf(buf, "%d",extr_id.y);
-          putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
+          putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));*/
         }
           
 #pragma omp critical
@@ -1058,21 +1065,15 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
         if (corner_find_off_save_int(corners, c, in_idx_step, in_idx_step, ipoints[2], int_search_range)) continue;
         if (corner_find_off_save_int(corners, c, 0, in_idx_step, ipoints[3], int_search_range)) continue;
         
-        float minlen = 1000000000000;
+        float len = 0.0;
         for(int i=0;i<4;i++) {
           Point2f v = ipoints[i]-ipoints[(i+1)%4];
-          float len = v.x*v.x+v.y*v.y;
-          if (len < minlen)
-            minlen = len;
-          v = ipoints[(i+3)%4]-ipoints[i];
-          len = v.x*v.x+v.y*v.y;
-          if (len < minlen)
-            minlen = len;
+          len += v.x*v.x+v.y*v.y;
         }
-        minlen = sqrt(minlen);
+        len = sqrt(len/4);
                 
         
-        if (minlen < 5*minsize_fac*recurse_min_len)
+        if (len < 5*minsize_fac*recurse_min_len)
           continue;
         
         
@@ -1102,7 +1103,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
                                 + (x+in_c_offset)*(ipoints[1]-ipoints[0])*0.2
                                 + (y+in_c_offset)*(ipoints[3]-ipoints[0])*0.2;
                                 
-            if (!p_area_in_img_border(img, refine_p, minlen*0.1)) {
+            if (!p_area_in_img_border(img, refine_p, len*0.1)) {
                 Interpolated_Corner c_i(target_id, Point2f(0,0), false);
     #pragma omp critical
                 blacklist[id_to_key(c_i.id)] = c_i;
@@ -1111,9 +1112,9 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             
             double params[8];
             Point2f p_cp = refine_p;
-            double rms = fit_gauss_direct(img, Point2f(minlen*0.2, minlen*0.2), refine_p, params, mask_2x2);
+            double rms = fit_gauss_direct(img, Point2f(len*0.2, len*0.2), refine_p, params, mask_2x2);
             
-            if (rms >= rms_use_limit*min(minlen*0.2,10.0)){
+            if (rms >= rms_use_limit*min(len*0.2,10.0)){
               
                 Interpolated_Corner c_i(target_id, Point2f(0,0), false);
     #pragma omp critical
@@ -1123,17 +1124,17 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
               
 #pragma omp critical (_paint_)
           if (paint) {
-            draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(minlen*0.2, minlen*0.2), params);
+            draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(len*0.2, len*0.2), params);
             Point2i extr_id(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset);
-            char buf[64];
+            /*char buf[64];
             sprintf(buf, "%d",extr_id.x);
             putText(*paint, buf, refine_p, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
             sprintf(buf, "%d",extr_id.y);
-            putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
+            putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));*/
           }
             
             Corner c_o(refine_p, Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), 0);
-            c_o.size = minlen*0.2;
+            c_o.size = len*0.2;
     #pragma omp critical
             {
               corners_out.push_back(c_o); 
