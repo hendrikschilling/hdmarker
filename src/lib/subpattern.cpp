@@ -856,6 +856,18 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         if (corners_map.find(id_to_key(extr_id)) != corners_map.end())
           continue;
         
+#pragma omp critical
+        {
+          if (blacklist.count(id_to_key(extr_id)))
+            do_continue = true;
+          if (!do_continue && corners_out_map.count(id_to_key(extr_id)))
+            do_continue = true;
+          if (do_continue)
+            skipped++;
+        }
+        if(do_continue)
+          continue;
+        
         //range from which to collect calibration points
         
         std::vector<Point2f> local_ids;
@@ -883,13 +895,8 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         
         //FIXME IMPORTANT check for degenerate sample distributions!
         if (local_ids.size() <= 10) {
-          //printf("only found %d points within range!\n", local_ids.size());
           continue;
         }
-        
-//         if (is_diff_larger(it->second.size, c.size, max_size_diff)) {
-//           continue;
-//         }
 
 #pragma omp critical
         if (corners_out_map.count(id_to_key(extr_id)) && corners_out_map[id_to_key(extr_id)].dist_searched < int_extend_range)
@@ -900,13 +907,6 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         Mat pers = findHomography(local_ids, local_points);
         if (pers.empty())
           abort();
-        /*std::vector<Point3f> target_id;
-        std::vector<Point3f> refine_points;
-        target_id.push_back(Point3f(extr_id.x, extr_id.y, 1));
-        
-        perspectiveTransform(target_id, refine_points, pers);
-        
-        Point2f refine_p(refine_points[0].x/refine_points[0].z,refine_points[0].y/refine_points[0].z);*/
         
         Matx31f projected = Matx33f(pers)*Matx31f(extr_id.x, extr_id.y, 1);
         Matx31f p_scale = Matx33f(pers)*Matx31f(1, 1, 0);
@@ -916,28 +916,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         
         if (is_diff_larger(size, local_minsize, max_size_diff)
             || is_diff_larger(size, local_minsize, max_size_diff))
-           continue;
-        
-        const std::vector<Point2f> *tried = NULL;
-        
-#pragma omp critical (__blacklist__)
-        if (blacklist.count(id_to_key(extr_id)))
-          tried = &blacklist[id_to_key(extr_id)];
-        
-        if (tried)
-          for(int i=0;i<tried->size();i++) {
-            Point2f d = (*tried)[i]-refine_p;
-            if (d.x*d.x+d.y*d.y < max_retry_dist*max_retry_dist*size*5*size*5) {
-              do_continue = true;
-#pragma omp atomic
-              skipped++;
-              break;
-            }
-          }
-
-        if (do_continue)
-          continue;
-    
+           continue;    
         
 #pragma omp critical
         {
