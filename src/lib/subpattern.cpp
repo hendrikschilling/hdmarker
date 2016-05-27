@@ -22,7 +22,7 @@ namespace hdmarker {
 static const float min_fit_contrast = 1.0;
 static const float min_fitted_contrast = 3.0; //minimum amplitude of fitted gaussian
 //static const float min_fit_contrast_gradient = 0.05;
-static const float rms_use_limit = 25.0;
+static const float rms_use_limit = 10.0;
 static const float recurse_min_len = 3.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 2;
@@ -325,8 +325,8 @@ struct GenGauss2dPlaneDirectError {
     x2 = x2*x2;
     y2 = y2*y2;
 
-    residuals[0] = (T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
-                        (p[2]-p[4])*exp(-abs(x2/sx2-xy2*p[8]+y2/sy2))))
+    residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
+                        (p[2]-p[4])*exp(-abs(x2/sx2-xy2*p[8]+y2/sy2))))+1e-18)
                    *T(sw_);
     
     return true;
