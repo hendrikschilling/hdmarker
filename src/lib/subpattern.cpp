@@ -33,8 +33,8 @@ static const float max_size_diff = 0.5;
 
 static int safety_border = 2;
 
-static const double bg_weight = 0.2;
-static const double s2_mul = sqrt(0.5);
+static const double bg_weight = 0.0;
+static const double s2_mul = sqrt(2.0);
 static const double tilt_max_rms_penalty = 9.0;
 static const double border_frac = 0.15;
 
@@ -46,7 +46,6 @@ static const float min_sigma_px = 0.45;
 //FIXME add possibility to reject too small sigma (less than ~one pixel (or two for bayer))
 
 static const int min_fit_data_points = 16;
-
 
 class SimpleCloud2d
 {
@@ -305,6 +304,45 @@ struct Gauss2dPlaneDirectError {
   double w_, px_, py_, h_, sw_;
 };
 
+
+struct GenGauss2dPlaneDirectError {
+  GenGauss2dPlaneDirectError(int val, int x, int y, double w, double h, double px, double py, double sw)
+      : val_(val), x_(x), y_(y), w_(w), h_(h), px_(px), py_(py), sw_(sw){}
+
+/**
+ * used function: 
+ */
+  template <typename T>
+  bool operator()(const T* const p,
+                  T* residuals) const {
+    T x2 = T(x_) - (T(px_)+sin(p[0])*T(w_*subfit_max_range));
+    T y2 = T(y_) - (T(py_)+sin(p[1])*T(h_*subfit_max_range));
+    T dx = T(x_) - T(px_);
+    T dy = T(y_) - T(py_);
+    T sx2 = T(2.0)*p[3]*p[3];
+    T sy2 = T(2.0)*p[7]*p[7];
+    T xy2 = x2*y2 * x2*y2;
+    x2 = x2*x2;
+    y2 = y2*y2;
+
+    residuals[0] = (T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
+                        (p[2]-p[4])*exp(-abs(x2/sx2-xy2*p[8]+y2/sy2))))
+                   *T(sw_);
+    
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(int val, int x, int y, double w, double h, double px, double py, double sw) {
+    return (new ceres::AutoDiffCostFunction<GenGauss2dPlaneDirectError, 1, 9>(
+                new GenGauss2dPlaneDirectError(val, x, y, w, h, px, py, sw)));
+  }
+
+  int x_, y_, val_;
+  double w_, px_, py_, h_, sw_;
+};
+
 struct Gauss2dDirectCenterError {
   Gauss2dDirectCenterError(int val, int x, int y, double px, double py, double sw)
       : val_(val), x_(x), y_(y), px_(px), py_(py), sw_(sw) {}
@@ -468,12 +506,15 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   options.max_num_iterations = 100;
   options.logging_type = ceres::LoggingType::SILENT;
   options.linear_solver_type = ceres::DENSE_QR;
-  options.preconditioner_type = ceres::IDENTITY;
+  //options.preconditioner_type = ceres::IDENTITY;
   
   ceres::Solver::Summary summary;
   ceres::Solve(options, &problem_gauss_center, &summary);
   
   //std::cout << summary.FullReport() << "\n";
+  
+  params[7] = params[3];
+  params[8] = 0;
   
   ceres::Problem problem_gauss_plane;
   for(y=area.y;y<=area.br().y;y++)
@@ -485,7 +526,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
         y2 = y2*y2;
         double s2 = s2_mul*(size.x*size.x+size.y*size.y);
         double sw = (1.0-bg_weight)*exp(-x2/s2-y2/s2) + bg_weight;
-        ceres::CostFunction* cost_function = Gauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
+        //ceres::CostFunction* cost_function = Gauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
+        ceres::CostFunction* cost_function = GenGauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
         problem_gauss_plane.AddResidualBlock(cost_function, NULL, params);
       }
       
@@ -511,9 +553,9 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
     return FLT_MAX;
   if (params[4] < 0 || params[4] > 255)
     return FLT_MAX;
-  if (abs(params[3]) >= size.x*max_sigma)
+  if (max(abs(params[3]),abs(params[7])) >= size.x*max_sigma)
     return FLT_MAX;
-  if (abs(params[3]) <= min_sigma_px)
+  if (min(abs(params[3]),abs(params[7])) <= min_sigma_px)
     return FLT_MAX;
   
   //if (retry_allowed) 
@@ -568,7 +610,7 @@ bool is_diff_larger(float a, float b, float th)
 }
 
 static bool marker_corner_valid(const Corner &c, int page, bool checkrange, const Rect & limit)
-{
+{  
   if (page != -1 && c.page != page)
     return false;
   
@@ -692,7 +734,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
           continue;
         }
         
-        double params[7];
+        double params[9];
         Point2f p_cp = refine_p;
 #pragma omp atomic
         checked++;
@@ -714,11 +756,11 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
 #pragma omp critical (_paint_)
         {
           draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(c_i.size, c_i.size), params);
-          /*char buf[64];
+          char buf[64];
           sprintf(buf, "%d",extr_id.x);
           putText(*paint, buf, refine_p, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
           sprintf(buf, "%d",extr_id.y);
-          putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));*/
+          putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
         }
           
 #pragma omp critical
@@ -819,6 +861,8 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         std::vector<Point2f> local_ids;
         std::vector<Point2f> local_points;
         
+        float local_minsize = FLT_MAX;
+        float local_maxsize = 0.0;
         float avg_size = 0.0;
         int c_range = max(abs(sx),abs(sy))*3;
         for(int csy=-c_range;csy<=c_range;csy++)
@@ -832,6 +876,8 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
               assert(it->second.id == search_id);
               local_ids.push_back(it->second.id);
               local_points.push_back(it->second.p);
+              local_minsize = min(local_minsize, it->second.size);
+              local_maxsize = max(local_maxsize, it->second.size);
             }
           }
         
@@ -867,7 +913,11 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         Point2f refine_p(projected(0)/projected(2),projected(1)/projected(2));
         
         float size = norm(Point2f(pers.at<double>(0,0),pers.at<double>(1,1)));
-
+        
+        if (is_diff_larger(size, local_minsize, max_size_diff)
+            || is_diff_larger(size, local_minsize, max_size_diff))
+           continue;
+        
         const std::vector<Point2f> *tried = NULL;
         
 #pragma omp critical (__blacklist__)
@@ -903,7 +953,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
           continue;
         }
         
-        double params[7];
+        double params[9];
         Point2f p_cp = refine_p;
 #pragma omp atomic
         checked++;
@@ -925,11 +975,11 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
 #pragma omp critical (_paint_)
         {
           draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(c_i.size, c_i.size), params);
-          /*char buf[64];
+          char buf[64];
           sprintf(buf, "%d",extr_id.x);
           putText(*paint, buf, refine_p, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
           sprintf(buf, "%d",extr_id.y);
-          putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));*/
+          putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
         }
           
 #pragma omp critical
@@ -1110,7 +1160,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
                 continue;
               }
             
-            double params[8];
+            double params[9];
             Point2f p_cp = refine_p;
             double rms = fit_gauss_direct(img, Point2f(len*0.2, len*0.2), refine_p, params, mask_2x2);
             
@@ -1126,11 +1176,11 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
           if (paint) {
             draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(len*0.2, len*0.2), params);
             Point2i extr_id(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset);
-            /*char buf[64];
+            char buf[64];
             sprintf(buf, "%d",extr_id.x);
             putText(*paint, buf, refine_p, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
             sprintf(buf, "%d",extr_id.y);
-            putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));*/
+            putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
           }
             
             Corner c_o(refine_p, Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), 0);
