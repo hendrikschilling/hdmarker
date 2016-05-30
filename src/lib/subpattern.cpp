@@ -8,7 +8,8 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 
-#include "ceres/ceres.h"
+#include <ceres/ceres.h>
+#include <ceres/rotation.h>
 
 #include <iostream>
 #include <unordered_map>
@@ -22,14 +23,14 @@ namespace hdmarker {
 static const float min_fit_contrast = 1.0;
 static const float min_fitted_contrast = 3.0; //minimum amplitude of fitted gaussian
 //static const float min_fit_contrast_gradient = 0.05;
-static const float rms_use_limit = 10.0;
+static const float rms_use_limit = 5.0;
 static const float recurse_min_len = 3.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 2;
 static const float extent_range_limit_size = 8;
 static const double subfit_max_range = 0.1;
 static const double fit_gauss_max_tilt = 2.0;
-static const float max_size_diff = 0.5;
+static const float max_size_diff = 1.0;
 
 static int safety_border = 2;
 
@@ -343,6 +344,51 @@ struct GenGauss2dPlaneDirectError {
   double w_, px_, py_, h_, sw_;
 };
 
+struct PersGauss2dPlaneDirectError {
+  PersGauss2dPlaneDirectError(int val, int x, int y, double w, double h, double px, double py, double sw)
+      : val_(val), x_(x), y_(y), w_(w), h_(h), px_(px), py_(py), sw_(sw){}
+
+/**
+ * used function: 
+ */
+  template <typename T>
+  bool operator()(const T* const p,
+                  T* residuals) const {
+    T x = T(x_) - (T(px_)+sin(p[0])*T(w_*subfit_max_range));
+    T y = T(y_) - (T(py_)+sin(p[1])*T(h_*subfit_max_range));
+    
+    T rot[3] = {p[7], p[8], T(0)};
+    T pt[3] = {x, y, T(0)};
+    
+    ceres::AngleAxisRotatePoint(rot, pt, pt);
+    
+    T x2 = pt[0];
+    T y2 = pt[1];
+    
+    T dx = T(x_) - T(px_);
+    T dy = T(y_) - T(py_);
+    T sx2 = T(2.0)*p[3]*p[3];
+    x2 = x2*x2;
+    y2 = y2*y2;
+
+    residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
+                        (p[2]-p[4])*exp(-(x2/sx2+y2/sx2))))+1e-18)
+                   *T(sw_);
+    
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(int val, int x, int y, double w, double h, double px, double py, double sw) {
+    return (new ceres::AutoDiffCostFunction<PersGauss2dPlaneDirectError, 1, 9>(
+                new PersGauss2dPlaneDirectError(val, x, y, w, h, px, py, sw)));
+  }
+
+  int x_, y_, val_;
+  double w_, px_, py_, h_, sw_;
+};
+
 struct Gauss2dDirectCenterError {
   Gauss2dDirectCenterError(int val, int x, int y, double px, double py, double sw)
       : val_(val), x_(x), y_(y), px_(px), py_(py), sw_(sw) {}
@@ -513,8 +559,10 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   
   //std::cout << summary.FullReport() << "\n";
   
-  params[7] = params[3];
+  //for GenGauss2dPlaneDirectError
+  params[7] = 0;//params[3];
   params[8] = 0;
+  params[9] = 1;
   
   ceres::Problem problem_gauss_plane;
   for(y=area.y;y<=area.br().y;y++)
@@ -527,7 +575,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
         double s2 = s2_mul*(size.x*size.x+size.y*size.y);
         double sw = (1.0-bg_weight)*exp(-x2/s2-y2/s2) + bg_weight;
         //ceres::CostFunction* cost_function = Gauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
-        ceres::CostFunction* cost_function = GenGauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
+        //ceres::CostFunction* cost_function = GenGauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
+        ceres::CostFunction* cost_function = PersGauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
         problem_gauss_plane.AddResidualBlock(cost_function, NULL, params);
       }
       
@@ -553,9 +602,13 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
     return FLT_MAX;
   if (params[4] < 0 || params[4] > 255)
     return FLT_MAX;
-  if (max(abs(params[3]),abs(params[7])) >= size.x*max_sigma)
+  /*if (max(abs(params[3]),abs(params[7])) >= size.x*max_sigma)
     return FLT_MAX;
   if (min(abs(params[3]),abs(params[7])) <= min_sigma_px)
+    return FLT_MAX;*/
+  if (abs(params[3]) >= size.x*max_sigma)
+    return FLT_MAX;
+  if (abs(params[3]) <= min_sigma_px)
     return FLT_MAX;
   
   //if (retry_allowed) 
@@ -734,7 +787,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
           continue;
         }
         
-        double params[9];
+        double params[10];
         Point2f p_cp = refine_p;
 #pragma omp atomic
         checked++;
@@ -932,7 +985,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
           continue;
         }
         
-        double params[9];
+        double params[10];
         Point2f p_cp = refine_p;
 #pragma omp atomic
         checked++;
@@ -1139,7 +1192,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
                 continue;
               }
             
-            double params[9];
+            double params[10];
             Point2f p_cp = refine_p;
             double rms = fit_gauss_direct(img, Point2f(len*0.2, len*0.2), refine_p, params, mask_2x2);
             
