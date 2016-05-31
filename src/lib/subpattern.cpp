@@ -23,7 +23,7 @@ namespace hdmarker {
 static const float min_fit_contrast = 1.0;
 static const float min_fitted_contrast = 3.0; //minimum amplitude of fitted gaussian
 //static const float min_fit_contrast_gradient = 0.05;
-static const float rms_use_limit = 5.0;
+static const float rms_use_limit = 10.0;
 static const float recurse_min_len = 3.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 4;
@@ -321,13 +321,23 @@ struct GenGauss2dPlaneDirectError {
     T dx = T(x_) - T(px_);
     T dy = T(y_) - T(py_);
     T sx2 = T(2.0)*p[3]*p[3];
-    T sy2 = T(2.0)*p[7]*p[7];
+    //max angle ~70°
+    T sigma_y = p[3]*T(1.25)+T(0.75)*sin(p[7]);
+    T sy2 = T(2.0)*sigma_y*sigma_y;
     T xy2 = x2*y2;
     x2 = x2*x2;
     y2 = y2*y2;
 
+    /*residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
+                        (p[2]-p[4])*exp(-abs(x2/sx2/*-xy2*p[8]+y2/sy2))))/**(T(1)+1.0*max(p[7]/p[3],p[3]/p[7]))+1e-18)
+                   *T(sw_);*/
+                   
+    T a = cos(p[8])*cos(p[8])/sx2 + sin(p[8])*sin(p[8])/sy2;
+    T b = sin(T(2)*p[8])*sin(T(2)*p[8])/sx2 + sin(T(2)*p[8])*sin(T(2)*p[8])/sy2;
+    T c = sin(p[8])*sin(p[8])/sx2+cos(p[8])*cos(p[8])/sy2;
+    
     residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
-                        (p[2]-p[4])*exp(-abs(x2/sx2/*-xy2*p[8]*/+y2/sy2))))/**(T(1)+1.0*max(p[7]/p[3],p[3]/p[7]))*/+1e-18)
+                        (p[2]-p[4])*exp(-abs(a*x2-T(2)*b*xy2+c*y2))))*(T(1)+T(0.1)*(max(abs(sigma_y/p[3]),abs(p[3]/sigma_y))))+1e-18)
                    *T(sw_);
     
     return true;
@@ -336,7 +346,7 @@ struct GenGauss2dPlaneDirectError {
   // Factory to hide the construction of the CostFunction object from
   // the client code.
   static ceres::CostFunction* Create(int val, int x, int y, double w, double h, double px, double py, double sw) {
-    return (new ceres::AutoDiffCostFunction<GenGauss2dPlaneDirectError, 1, 8>(
+    return (new ceres::AutoDiffCostFunction<GenGauss2dPlaneDirectError, 1, 9>(
                 new GenGauss2dPlaneDirectError(val, x, y, w, h, px, py, sw)));
   }
 
@@ -491,8 +501,8 @@ static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i 
   uint8_t *ptr = img.ptr<uchar>(0);
   int w = img.size().width;
   
-  for(int y=c.y-size.y/2;y<=c.y+size.y/2;y++)
-    for(int x=c.x-size.x/2;x<=c.x+size.x/2;x++) {
+  for(int y=c.y-size.y/2;y<=c.y+size.y/2+1;y++)
+    for(int x=c.x-size.x/2;x<=c.x+size.x/2+1;x++) {
       double x2 = x - res.x;
       double y2 = y - res.y;
       double dx = x - c.x;
@@ -508,12 +518,18 @@ static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i 
       y2 = pt[1]/abs(pt[2]+1e-18);*/
       
       double sx2 = 2.0*p[3]*p[3];
-      double sy2 = 2.0*p[7]*p[7];
+      //double sy2 = 2.0*p[7]*p[7];
+      double sigma_y = p[3]*1.25+0.75*sin(p[7]);
+      double sy2 = 2.0*sigma_y*sigma_y;
       double xy2 = x2*y2;
       x2 = x2*x2;
       y2 = y2*y2;
       
-      ptr[y*w+x] = clamp<int>(p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-abs(x2/sx2/*-xy2*p[8]*/+y2/sx2)), 0, 255);
+      double a = cos(p[8])*cos(p[8])/sx2 + sin(p[8])*sin(p[8])/sy2;
+      double b = sin(2*p[8])*sin(2*p[8])/sx2 + sin(2*p[8])*sin(2*p[8])/sy2;
+      double c = sin(p[8])*sin(p[8])/sx2+cos(p[8])*cos(p[8])/sy2;
+      
+      ptr[y*w+x] = clamp<int>(p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-abs(a*x2-2*b*xy2+c*y2)), 0, 255);
     }
 }
 
@@ -665,19 +681,27 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
     return FLT_MAX;
   if (params[4] < 0 || params[4] > 255)
     return FLT_MAX;
-  if (max(abs(params[3]),abs(params[7])) >= size.x*max_sigma)
+  /*if (max(abs(params[3]),abs(params[7])) >= size.x*max_sigma)
     return FLT_MAX;
   if (min(abs(params[3]),abs(params[7])) <= min_sigma_px)
-    return FLT_MAX;
-  /*if (abs(params[3]) >= size.x*max_sigma)
+    return FLT_MAX;*/
+  
+  if (abs(params[3]) >= size.x*max_sigma)
     return FLT_MAX;
   if (abs(params[3]) <= min_sigma_px)
-    return FLT_MAX;*/
+    return FLT_MAX;
+  
+  
+  double sigma_y = params[3]*1.25+0.75*sin(params[7]);
+  if (abs(sigma_y) >= size.x*max_sigma)
+    return FLT_MAX;
+  if (abs(sigma_y) <= min_sigma_px)
+    return FLT_MAX;
   
   //printf("final rot: %fx%f\n", params[7], params[8]);
   
-  /*if (retry_allowed) 
-    return fit_gauss_direct(img, size, p, params, mask_2x2, false);*/
+  if (retry_allowed) 
+    return fit_gauss_direct(img, size, p, params, mask_2x2, false);
   
   return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt);
 }
