@@ -563,7 +563,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   params[0] = 0.0;
   params[1] = 0.0;
   
-  Rect area(p.x+0.5-hw.x+b.x, p.y+0.5-hw.y+b.y, r_size.x-2*b.x, r_size.y-2*b.y);
+  Rect area(p.x+0.5-hw.x+b.x, p.y+0.5-hw.y+b.y, r_size.x-2*b.x+0.5, r_size.y-2*b.y+0.5);
   
   int y, x;
   
