@@ -337,7 +337,7 @@ struct GenGauss2dPlaneDirectError {
     T c = sin(p[8])*sin(p[8])/sx2+cos(p[8])*cos(p[8])/sy2;
     
     residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
-                        (p[2]-p[4])*exp(-abs(a*x2-T(2)*b*xy2+c*y2))))*(T(1)+T(0.1)*(max(abs(sigma_y/p[3]),abs(p[3]/sigma_y))))+1e-18)
+                        (p[2]-p[4])*exp(-abs(a*x2-T(2)*b*xy2+c*y2))))*(T(1)+T(1.0)*(max(abs(sigma_y/p[3]),abs(p[3]/sigma_y))))+1e-18)
                    *T(sw_);
     
     return true;
