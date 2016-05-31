@@ -327,7 +327,7 @@ struct GenGauss2dPlaneDirectError {
     y2 = y2*y2;
 
     residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
-                        (p[2]-p[4])*exp(-abs(x2/sx2-xy2*p[8]+y2/sy2))))+1e-18)
+                        (p[2]-p[4])*exp(-abs(x2/sx2/*-xy2*p[8]*/+y2/sy2))))/**(T(1)+1.0*max(p[7]/p[3],p[3]/p[7]))*/+1e-18)
                    *T(sw_);
     
     return true;
@@ -336,7 +336,7 @@ struct GenGauss2dPlaneDirectError {
   // Factory to hide the construction of the CostFunction object from
   // the client code.
   static ceres::CostFunction* Create(int val, int x, int y, double w, double h, double px, double py, double sw) {
-    return (new ceres::AutoDiffCostFunction<GenGauss2dPlaneDirectError, 1, 9>(
+    return (new ceres::AutoDiffCostFunction<GenGauss2dPlaneDirectError, 1, 8>(
                 new GenGauss2dPlaneDirectError(val, x, y, w, h, px, py, sw)));
   }
 
@@ -358,6 +358,56 @@ struct PersGauss2dPlaneDirectError {
     T y = T(y_) - (T(py_)+sin(p[1])*T(h_*subfit_max_range));
     
     T rot[3] = {p[7], p[8], T(0)};
+    //T rot[3] = {T(0), T(0), T(0)};
+    T pt[3] = {x*p[9], y*p[9], p[9]};
+    
+    ceres::AngleAxisRotatePoint(rot, pt, pt);
+    
+    T x2 = pt[0]/abs(pt[2]+1e-18);
+    T y2 = pt[1]/abs(pt[2]+1e-18);
+    
+    T dx = T(x_) - T(px_);
+    T dy = T(y_) - T(py_);
+    T sx2 = T(2.0)*p[3]*p[3];
+    x2 = x2*x2;
+    y2 = y2*y2;
+
+    residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
+                        (p[2]-p[4])*exp(-(x2/sx2+y2/sx2))))+1e-18)
+                   *T(sw_);
+    
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(int val, int x, int y, double w, double h, double px, double py, double sw) {
+    return (new ceres::AutoDiffCostFunction<PersGauss2dPlaneDirectError, 1, 10>(
+                new PersGauss2dPlaneDirectError(val, x, y, w, h, px, py, sw)));
+  }
+
+  int x_, y_, val_;
+  double w_, px_, py_, h_, sw_;
+};
+
+
+struct OrthoGauss2dPlaneDirectError {
+  OrthoGauss2dPlaneDirectError(int val, int x, int y, double w, double h, double px, double py, double sw)
+      : val_(val), x_(x), y_(y), w_(w), h_(h), px_(px), py_(py), sw_(sw){}
+
+/**
+ * used function: 
+ */
+  template <typename T>
+  bool operator()(const T* const p,
+                  T* residuals) const {
+    T x = T(x_) - (T(px_)+sin(p[0])*T(w_*subfit_max_range));
+    T y = T(y_) - (T(py_)+sin(p[1])*T(h_*subfit_max_range));
+    
+    T rot[3] = {sin(p[7]), T(1)-sin(p[7]), T(0)};
+    //max rotataion of +-1
+    rot[0] *= sin(p[8]);
+    rot[1] *= sin(p[8]); 
     T pt[3] = {x, y, T(1)};
     
     ceres::AngleAxisRotatePoint(rot, pt, pt);
@@ -381,8 +431,8 @@ struct PersGauss2dPlaneDirectError {
   // Factory to hide the construction of the CostFunction object from
   // the client code.
   static ceres::CostFunction* Create(int val, int x, int y, double w, double h, double px, double py, double sw) {
-    return (new ceres::AutoDiffCostFunction<PersGauss2dPlaneDirectError, 1, 9>(
-                new PersGauss2dPlaneDirectError(val, x, y, w, h, px, py, sw)));
+    return (new ceres::AutoDiffCostFunction<OrthoGauss2dPlaneDirectError, 1, 9>(
+                new OrthoGauss2dPlaneDirectError(val, x, y, w, h, px, py, sw)));
   }
 
   int x_, y_, val_;
@@ -447,13 +497,23 @@ static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i 
       double y2 = y - res.y;
       double dx = x - c.x;
       double dy = y - c.y;
+      
+      /*double rot[3] = {p[7], p[8], 0};
+      //double rot[3] = {0, 0, 0};
+      double pt[3] = {x2*p[9], y2*p[9], p[9]};
+    
+      ceres::AngleAxisRotatePoint(rot, pt, pt);
+    
+      x2 = pt[0]/abs(pt[2]+1e-18);
+      y2 = pt[1]/abs(pt[2]+1e-18);*/
+      
       double sx2 = 2.0*p[3]*p[3];
       double sy2 = 2.0*p[7]*p[7];
       double xy2 = x2*y2;
       x2 = x2*x2;
       y2 = y2*y2;
       
-      ptr[y*w+x] = clamp<int>(p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-abs(x2/sx2-xy2*p[8]+y2/sy2)), 0, 255);
+      ptr[y*w+x] = clamp<int>(p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-abs(x2/sx2/*-xy2*p[8]*/+y2/sx2)), 0, 255);
     }
 }
 
@@ -564,7 +624,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   //for GenGauss2dPlaneDirectError
   params[7] = params[3];
   params[8] = 0;
-  //params[9] = 1;
+  params[9] = 1000000000;
   
   ceres::Problem problem_gauss_plane;
   for(y=area.y;y<=area.br().y;y++)
@@ -579,6 +639,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
         //ceres::CostFunction* cost_function = Gauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
         ceres::CostFunction* cost_function = GenGauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
         //ceres::CostFunction* cost_function = PersGauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
+        //ceres::CostFunction* cost_function = OrthoGauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
         problem_gauss_plane.AddResidualBlock(cost_function, NULL, params);
       }
       
@@ -594,11 +655,11 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   /*if (size.x <= 5 && params[2] < params[4] )
     printf("contrast %f\n", contrast);*/
   
-  /*if (norm(p-Point2f(960,337))<4) {
-    std::cout << summary.FullReport() << "\n";
-    printf("final rms: %f\n", sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt));
-    abort();
-  }*/
+  /*if (norm(p-Point2f(960,337))<4) {*/
+    /*std::cout << summary.FullReport() << "\n";
+    printf("final rms: %f\n", sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt));*/
+    //abort();
+  //}*/
   
   if (contrast <= min_fitted_contrast)
     return FLT_MAX;
@@ -615,8 +676,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   
   //printf("final rot: %fx%f\n", params[7], params[8]);
   
-  if (retry_allowed) 
-    return fit_gauss_direct(img, size, p, params, mask_2x2, false);
+  /*if (retry_allowed) 
+    return fit_gauss_direct(img, size, p, params, mask_2x2, false);*/
   
   return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt);
 }
