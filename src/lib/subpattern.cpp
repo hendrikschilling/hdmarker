@@ -697,14 +697,17 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   if (min(abs(params[3]),abs(params[7])) <= min_sigma_px)
     return FLT_MAX;*/
   
-  if (abs(params[3]) >= size.x*max_sigma)
+  double max_sigma_px = size.x*max_sigma*(std::min(contrast, 20.0)/20.0);
+  if (size.x >= 6)
+    max_sigma_px = size.x*max_sigma;  
+  
+  if (abs(params[3]) >= max_sigma_px)
     return FLT_MAX;
   if (abs(params[3]) <= min_sigma_px)
     return FLT_MAX;
   
-  
-  double sigma_y = params[3]*1.25+0.75*sin(params[7]);
-  if (abs(sigma_y) >= size.x*max_sigma)
+  double sigma_y = abs(params[3])*1.25+0.75*sin(params[7]);
+  if (abs(sigma_y) >= max_sigma_px)
     return FLT_MAX;
   if (abs(sigma_y) <= min_sigma_px)
     return FLT_MAX;
