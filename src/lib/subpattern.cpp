@@ -333,7 +333,7 @@ struct GenGauss2dPlaneDirectError {
     T dy = T(y_) - T(py_);
     T sx2 = T(2.0)*p[3]*p[3];
     //max angle ~70°
-    T sigma_y = p[3]*T(1.25)+T(0.75)*sin(p[7]);
+    T sigma_y = abs(p[3])*T(1.25)+T(0.75)*sin(p[7]);
     T sy2 = T(2.0)*sigma_y*sigma_y;
     T xy2 = x2*y2;
     x2 = x2*x2;
