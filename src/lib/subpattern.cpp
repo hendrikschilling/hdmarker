@@ -1278,6 +1278,9 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
         /*int undersampling = max(maxlen / size, 1);
         int undersampling_idx = log2(undersampling);*/
         
+        vector<Point2f> ipoints_src = {Point2f(0, 0), Point2f(10, 0), Point2f(10, 10), Point2f(0, 10)};
+        Mat pers = getPerspectiveTransform(ipoints_src, ipoints);
+        
         for(int y=0;y<5;y++)
           for(int x=0;x<5;x++) {
             Point2i target_id(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset);
@@ -1294,10 +1297,11 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
                 continue;
               }
             }
-            //FIXME use proper (perspective?) center
-            Point2f refine_p = ipoints[0] 
-                                + (x+in_c_offset)*(ipoints[1]-ipoints[0])*0.2
-                                + (y+in_c_offset)*(ipoints[3]-ipoints[0])*0.2;
+            
+            std::vector<Point2f> pers_src = {Point2f(out_idx_offset+2*x,out_idx_offset+2*y)};
+            std::vector<Point2f> pers_dst;
+            perspectiveTransform(pers_src, pers_dst, pers);
+            Point2f refine_p = pers_dst[0];
                                 
             if (!p_area_in_img_border(img, refine_p, len*0.1)) {
                 Interpolated_Corner c_i(target_id, Point2f(0,0), false);
