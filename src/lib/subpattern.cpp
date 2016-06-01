@@ -41,7 +41,6 @@ static const double border_frac = 0.15;
 
 static const float max_retry_dist = 0.1;
 
-static const float fit_size_min = 5.0;
 static const float max_sigma = 0.25;
 static const float min_sigma_px = 0.45;
 //FIXME add possibility to reject too small sigma (less than ~one pixel (or two for bayer))
@@ -551,10 +550,6 @@ static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i 
 static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *params = NULL, bool *mask_2x2 = NULL, bool retry_allowed = true)
 {  
   Point2f r_size = size;
-  /*if (r_size.x < fit_size_min)
-    r_size.x = fit_size_min;
-  if (r_size.y < fit_size_min)
-    r_size.y = fit_size_min;*/
   
   int w = img.size().width;
   Point2i hw = r_size*0.5;
@@ -692,10 +687,6 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
     return FLT_MAX;
   if (params[4] < 0 || params[4] > 255)
     return FLT_MAX;
-  /*if (max(abs(params[3]),abs(params[7])) >= size.x*max_sigma)
-    return FLT_MAX;
-  if (min(abs(params[3]),abs(params[7])) <= min_sigma_px)
-    return FLT_MAX;*/
   
   double max_sigma_px = size.x*max_sigma*(std::min(contrast, 20.0)/20.0);
   if (size.x >= 6)
@@ -712,11 +703,10 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   if (abs(sigma_y) <= min_sigma_px)
     return FLT_MAX;
   
-  //printf("final rot: %fx%f\n", params[7], params[8]);
-  
   if (retry_allowed) 
     return fit_gauss_direct(img, size, p, params, mask_2x2, false);
   
+
   return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt);
 }
 
@@ -1317,7 +1307,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             Point2f p_cp = refine_p;
             double rms = fit_gauss_direct(img, Point2f(len*0.2, len*0.2), refine_p, params, mask_2x2);
             
-            if (rms >= rms_use_limit*min(len*0.2,10.0)){
+            if (rms >= rms_use_limit*min(len*0.2,10.0)) {
               
                 Interpolated_Corner c_i(target_id, Point2f(0,0), false);
     #pragma omp critical
