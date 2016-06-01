@@ -1407,7 +1407,7 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
     mul *= 5;
     
     keep = 0;
-    if (flags & KEEP_ALL_LEVELS)
+    if (flags & KEEP_ALL_LEVELS || flags & KEEP_ALL_RECURSIVE_LEVELS)
       keep = corners_out.size();
     
     for(int i=0;i<keep;i++)
