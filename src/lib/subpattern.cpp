@@ -48,6 +48,17 @@ static const float min_sigma_px = 0.45;
 
 static const int min_fit_data_points = 16;
 
+cv::Mat gt_c, gt_r, gt_t;
+bool eval_gt = false;
+
+void hdmarker_subpattern_set_gt_mats(cv::Mat &c, cv::Mat &r, cv::Mat &t)
+{
+  eval_gt = true;
+  gt_c = c;
+  gt_r = r;
+  gt_t = t;
+}
+
 class SimpleCloud2d
 {
 public:
@@ -949,7 +960,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
   return added;
 }
 
-int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corners, vector<Corner> &corners_out, IntCMap &blacklist_rec, IntCLMap &blacklist, int idx_step, int int_extend_range, SimpleCloud2d &points, Mat *paint = NULL, bool *mask_2x2 = NULL, bool checkrange = false, const cv::Rect limit = Rect())
+int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corners, vector<Corner> &corners_out, IntCMap &blacklist_rec, IntCLMap &blacklist, int idx_step, int int_extend_range, SimpleCloud2d &points, Mat *paint = NULL, bool *mask_2x2 = NULL, bool checkrange = false, const cv::Rect limit = Rect(), int mul = 0)
 {
   int counter = 0;
   int added = 0;
@@ -1096,7 +1107,21 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
 #pragma omp critical (_paint_)
         {
           draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(size, size), params);
-
+          
+            if (eval_gt) {
+              Matx31d gt_wp(extr_id.x*(1.0/mul),extr_id.y*(1.0/mul),0);
+              Matx31d gt_cp = Matx33d(gt_r)*gt_wp + Matx31d(gt_t);
+              gt_cp = Matx33d(gt_c)*gt_cp;
+              Point2f gt_ip(gt_cp(0)/gt_cp(2)-0.5,gt_cp(1)/gt_cp(2)-0.5);
+              if (norm(gt_ip-refine_p) >= 0.05*size) {
+                cout << gt_ip-refine_p << "\n";
+                cout << p_cp << "\n";
+                printf("%f\n", norm(gt_ip-refine_p)/(size));
+                //imwrite("fitted.tif", *paint);
+                //abort();
+              }
+            }
+          
           /*char buf[64];
           sprintf(buf, "%d",extr_id.x);
           putText(*paint, buf, refine_p, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
@@ -1148,7 +1173,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
   return added;
 }
 
-void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours, Mat *paint, bool *mask_2x2, int page, bool checkrange, const cv::Rect limit, bool show_progress = false)
+void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours, Mat *paint, bool *mask_2x2, int page, bool checkrange, const cv::Rect limit, bool show_progress = false, int mul = 0)
 {  
   int counter = 0;
   sort(corners.begin(), corners.end(), corner_cmp);
@@ -1298,6 +1323,21 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(len*0.2, len*0.2), params);
             Point2i extr_id(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset);
 
+            
+            if (eval_gt) {
+              Matx31d gt_wp(target_id.x*(1.0/mul),target_id.y*(1.0/mul),0);
+              Matx31d gt_cp = Matx33d(gt_r)*gt_wp + Matx31d(gt_t);
+              gt_cp = Matx33d(gt_c)*gt_cp;
+              Point2f gt_ip(gt_cp(0)/gt_cp(2)-0.5,gt_cp(1)/gt_cp(2)-0.5);
+              if (norm(gt_ip-refine_p) >= 0.05*len*0.2) {
+                cout << gt_ip-refine_p << "\n";
+                cout << p_cp << "\n";
+                printf("%f\n", norm(gt_ip-refine_p)/(len*0.2));
+                //imwrite("fitted.tif", *paint);
+                //abort();
+              }
+            }
+            
             /*char buf[64];
             sprintf(buf, "%d",extr_id.x);
             putText(*paint, buf, refine_p, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
@@ -1329,7 +1369,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
       int found = corners_out.size();
       while (found > (corners_out.size()-found)*0.01 || (found > 1 && r == int_extend_range)) {
         //hdmarker_subpattern_checkneighbours results depend on corner ordering - make repeatable for threading!
-        found = hdmarker_subpattern_checkneighbours_pers(img, corners_out, corners_out, blacklist, blacklist_neighbours, 2, r, points, paint, mask_2x2, checkrange, limit);
+        found = hdmarker_subpattern_checkneighbours_pers(img, corners_out, corners_out, blacklist, blacklist_neighbours, 2, r, points, paint, mask_2x2, checkrange, limit, mul);
         std::sort(corners_out.begin(), corners_out.end(), corner_cmp);
         if (found > (corners_out.size()-found)*0.01) {
           r = 1;
@@ -1371,7 +1411,7 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
   corners_out = corners;
   int in_idx_step = 1;
   int mul = 10;
-  hdmarker_subpattern_step(img, ca, cb, in_idx_step, 0.5, 10, 1, false, paint, mask_2x2, page, checkrange, Rect(limit.tl().x*mul,limit.tl().y*mul,limit.size().width*mul,limit.size().height*mul));
+  hdmarker_subpattern_step(img, ca, cb, in_idx_step, 0.5, 10, 1, false, paint, mask_2x2, page, checkrange, Rect(limit.tl().x*mul,limit.tl().y*mul,limit.size().width*mul,limit.size().height*mul), false, mul);
   in_idx_step = 2;
   
   //imwrite("debug.tif", *paint);
@@ -1396,7 +1436,7 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
   for(int i=2;i<=depth;i++) {
     ca = cb;
     cb.resize(0);
-    hdmarker_subpattern_step(img , ca, cb, in_idx_step, 0.0, 5, 0, true, paint, mask_2x2, page, checkrange, Rect(limit.tl().x*mul*5,limit.tl().y*mul*5,limit.size().width*mul*5,limit.size().height*mul*5));
+    hdmarker_subpattern_step(img , ca, cb, in_idx_step, 0.0, 5, 0, true, paint, mask_2x2, page, checkrange, Rect(limit.tl().x*mul*5,limit.tl().y*mul*5,limit.size().width*mul*5,limit.size().height*mul*5), false, mul*5);
     in_idx_step = 1;
     printf("stepped!\n");
     if (cb.size() <= ca.size()) {
