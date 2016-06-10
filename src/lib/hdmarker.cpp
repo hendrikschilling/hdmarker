@@ -77,7 +77,7 @@ const int dir_step_refine = 64;
 //FIXME post detection refinement + adapt with effort
 const float refine_min_step = 1.0/64.0;
 const float refine_max_step = 0.5;
-const int marker_neighbour_valid_count = 3;
+const int marker_neighbour_valid_count = 5;
 const int marker_neighbour_sure_count = 8;
 const int chess_dist = 1;
 const float min_angle = 0.1; //0.1 ==  45deg?

@@ -26,16 +26,18 @@ static const float min_fitted_contrast = 3.0; //minimum amplitude of fitted gaus
 static const float rms_use_limit = 10.0;
 static const float recurse_min_len = 3.0;
 static const int int_search_range = 11;
-static const int int_extend_range = 4;
+static const int int_extend_range = 2;
 static const float extent_range_limit_size = 8;
-static const double subfit_max_range = 0.1;
+static const double subfit_max_range = 0.2;
 static const double fit_gauss_max_tilt = 2.0;
 static const float max_size_diff = 1.0;
+static const float max_sigma_diff = 4.0;
+static const float sigma_anisotropy_penalty = 0.0;
 
 static int safety_border = 2;
 
 static const double bg_weight = 0.0;
-static const double s2_mul = sqrt(2.0);
+static const double mul_size_sigma = 0.3;
 static const double tilt_max_rms_penalty = 9.0;
 static const double border_frac = 0.15;
 
@@ -636,8 +638,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
         double y2 = y-p.y;
         x2 = x2*x2;
         y2 = y2*y2;
-        double s2 = s2_mul*(size.x*size.x+size.y*size.y);
-        double sw = (1.0-bg_weight)*exp(-x2/s2-y2/s2) + bg_weight;
+        double ss2 = mul_size_sigma*(size.x*size.x+size.y*size.y);
+        double sw = (1.0-bg_weight)*exp(-x2/ss2-y2/ss2) + bg_weight;
         ceres::CostFunction* cost_function = Gauss2dDirectCenterError::Create(ptr[y*w+x], x, y, p.x, p.y, sw);
         problem_gauss_center.AddResidualBlock(cost_function, NULL, params+2);
       }
@@ -655,7 +657,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   
   //for GenGauss2dPlaneDirectError
   params[7] = params[3];
-  params[8] = 0;
+  params[8] = 2*M_PI;
   params[9] = 1000000000;
   
   ceres::Problem problem_gauss_plane;
@@ -666,8 +668,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
         double y2 = y-p.y;
         x2 = x2*x2;
         y2 = y2*y2;
-        double s2 = s2_mul*(size.x*size.x+size.y*size.y);
-        double sw = (1.0-bg_weight)*exp(-x2/s2-y2/s2) + bg_weight;
+        double ss2 = mul_size_sigma*(size.x*size.x+size.y*size.y);
+        double sw = (1.0-bg_weight)*exp(-x2/ss2-y2/ss2) + bg_weight;
         //ceres::CostFunction* cost_function = Gauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
         ceres::CostFunction* cost_function = GenGauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
         //ceres::CostFunction* cost_function = PersGauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
@@ -687,11 +689,11 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   /*if (size.x <= 5 && params[2] < params[4] )
     printf("contrast %f\n", contrast);*/
   
-  /*if (norm(p-Point2f(960,337))<4) {*/
-    /*std::cout << summary.FullReport() << "\n";
-    printf("final rms: %f\n", sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt));*/
-    //abort();
-  //}*/
+  /*if (norm(p-Point2f(1215,795))<3 ) {
+    std::cout << summary.FullReport() << "\n";
+    printf("final rms: %f\n", sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt));
+    abort();
+  }*/
   
   if (contrast <= min_fitted_contrast)
     return FLT_MAX;
@@ -719,6 +721,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   if (retry_allowed) 
     return fit_gauss_direct(img, size, p, params, mask_2x2, false);
   
+  //printf("gauss: %f / %f / %f\n", params[3], sigma_y, params[8]);
 
   return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt);
 }
@@ -966,6 +969,27 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
   return added;
 }
 
+float size_from_pers(const Matx33f &p, int idx_step, const Point2i &extr_id, const Matx31f &projected)
+{
+  float dx_x = (p(0, 0) * projected(2) - p(2, 0) * projected(0)) / (projected(2)*projected(2));
+  float dx_y = (p(1, 0) * projected(2) - p(2, 0) * projected(1)) / (projected(2)*projected(2));
+  
+  float dy_x = (p(0, 1) * projected(2) - p(2, 1) * projected(0)) / (projected(2)*projected(2));
+  float dy_y = (p(1, 1) * projected(2) - p(2, 1) * projected(1)) / (projected(2)*projected(2));
+  
+  float size = min(max(abs(dx_x), abs(dx_y)),max(abs(dy_x), abs(dy_y)))*idx_step;
+  
+  return size;
+}
+
+float size_from_pers(const Matx33f &p, int idx_step, const Point2i &extr_id)
+{
+  Matx31f projected = p*Matx31f(extr_id.x, extr_id.y, 1);
+  
+  return size_from_pers(p, idx_step, extr_id, projected);
+}
+
+
 int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corners, vector<Corner> &corners_out, IntCMap &blacklist_rec, IntCLMap &blacklist, int idx_step, int int_extend_range, SimpleCloud2d &points, Mat *paint = NULL, bool *mask_2x2 = NULL, bool checkrange = false, const cv::Rect limit = Rect(), int mul = 0)
 {
   int counter = 0;
@@ -1030,7 +1054,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         float local_minsize = FLT_MAX;
         float local_maxsize = 0.0;
         float avg_size = 0.0;
-        int c_range = max(abs(sx),abs(sy))*3;
+        int c_range = max(2,max(abs(sx),abs(sy)))*2;
         for(int csy=-c_range;csy<=c_range;csy++)
           for(int csx=-c_range;csx<=c_range;csx++) {
             Point2i search_id = Point2i(c.id)+Point2i(csx,csy)*idx_step;
@@ -1048,7 +1072,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
           }
         
         //FIXME IMPORTANT check for degenerate sample distributions!
-        if (local_ids.size() <= 10) {
+        if (local_ids.size() <= 8) {
           continue;
         }
 
@@ -1063,23 +1087,37 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
           abort();
         
         Matx31f projected = Matx33f(pers)*Matx31f(extr_id.x, extr_id.y, 1);
+        Matx33f p_xm(pers);
         Matx31f px = Matx33f(pers)*Matx31f(1, 0, 0);
         Matx31f py = Matx33f(pers)*Matx31f(0, 1, 0);
         Matx31f p_scale = Matx33f(pers)*Matx31f(1/sqrt(2), 1/sqrt(2), 0);
         Point2f refine_p(projected(0)/projected(2),projected(1)/projected(2));
         
-        float size = min(norm(Point2f(px(0)/projected(2),px(1)/projected(2))),norm(Point2f(py(0)/projected(2),py(1)/projected(2))))*idx_step;
-        //float size = norm(Point2f(pers.at<double>(0,0),pers.at<double>(1,1)));
+        float size = size_from_pers(pers, idx_step, extr_id, projected);
+        
+        if (size*size < min_fit_data_points)
+          continue;
+        
+        
+        //size = min(norm(Point2f(px(0)/projected(2),px(1)/projected(2))),norm(Point2f(py(0)/projected(2),py(1)/projected(2))))*idx_step;
+
+        //size = min(norm(Point2f(px(0)/(projected(2)),px(1)/(projected(2)))),norm(Point2f(py(0)/(projected(2),py(1)/(projected(2))))))*idx_step;
+        
+        //float size = min(norm(Point2f(px(0)/(projected(2)+px(2)),px(1)/(projected(2)+px(2)))),norm(Point2f(py(0)/(projected(2)+py(2),py(1)/(projected(2)+py(2))))))*idx_step;
+        
+        //printf("size: %f (%f-%f) %f %f %f %f\n", size,local_minsize,local_maxsize,  dx_x, dx_y, dy_x, dy_y);
+        
+        //size = norm(Point2f(pers.at<double>(0,0),pers.at<double>(1,1)));
         
         //printf("size %f x %f instead of %f\n", norm(Point2f(px(0)/projected(2),px(1)/projected(2))),norm(Point2f(py(0)/projected(2),py(1)/projected(2))), norm(Point2f(pers.at<double>(0,0),pers.at<double>(1,1)))) ;
         
         /*if (is_diff_larger(size, local_minsize, max_size_diff)
-            || is_diff_larger(size, local_minsize, max_size_diff))
+            || is_diff_larger(size, local_maxsize, max_size_diff))
            continue;    */
         
 #pragma omp critical
         {
-          if (!points.CheckRad(refine_p, 2, extr_id)) {
+          if (!points.CheckRad(refine_p, 1, extr_id)) {
             imwrite("fitted.tif", *paint);
             abort();
           }
@@ -1119,11 +1157,13 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
               Matx31d gt_cp = Matx33d(gt_r)*gt_wp + Matx31d(gt_t);
               gt_cp = Matx33d(gt_c)*gt_cp;
               Point2f gt_ip(gt_cp(0)/gt_cp(2)-0.5,gt_cp(1)/gt_cp(2)-0.5);
-              if (norm(gt_ip-refine_p) >= 0.05*size) {
+              if (norm(gt_ip-refine_p) >= 1.0) {
                 cout << gt_ip-refine_p << "\n";
                 cout << p_cp << "\n";
+                char buf[128];
                 printf("%f\n", norm(gt_ip-refine_p)/(size));
-                //imwrite("fitted.tif", *paint);
+                sprintf(buf, "fitted_off_%dx%d.tif", int(gt_ip.x), int(gt_ip.y));
+                imwrite(buf, *paint);
                 //abort();
               }
             }
@@ -1308,6 +1348,15 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             std::vector<Point2f> pers_dst;
             perspectiveTransform(pers_src, pers_dst, pers);
             Point2f refine_p = pers_dst[0];
+            
+            Matx31f projected = Matx33f(pers)*Matx31f(out_idx_offset+2*x,out_idx_offset+2*y, 1);
+            Matx31f px = Matx33f(pers)*Matx31f(1, 0, 0);
+            Matx31f py = Matx33f(pers)*Matx31f(0, 1, 0);
+        
+            float size = size_from_pers(pers, 2, Point2i(out_idx_offset+2*x,out_idx_offset+2*y), projected);
+            len = size*5;
+            
+            //printf("calc %f vs odl %f\n", size, len*0.2);
                                 
             if (!p_area_in_img_border(img, refine_p, len*0.1)) {
                 Interpolated_Corner c_i(target_id, Point2f(0,0), false);
@@ -1339,11 +1388,13 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
               Matx31d gt_cp = Matx33d(gt_r)*gt_wp + Matx31d(gt_t);
               gt_cp = Matx33d(gt_c)*gt_cp;
               Point2f gt_ip(gt_cp(0)/gt_cp(2)-0.5,gt_cp(1)/gt_cp(2)-0.5);
-              if (norm(gt_ip-refine_p) >= 0.05*len*0.2) {
+              if (norm(gt_ip-refine_p) >= 1.0) {
                 cout << gt_ip-refine_p << "\n";
                 cout << p_cp << "\n";
+                char buf[128];
                 printf("%f\n", norm(gt_ip-refine_p)/(len*0.2));
-                //imwrite("fitted.tif", *paint);
+                sprintf(buf, "fitted_off_%dx%d.tif", int(gt_ip.x), int(gt_ip.y));
+                imwrite(buf, *paint);
                 //abort();
               }
             }
