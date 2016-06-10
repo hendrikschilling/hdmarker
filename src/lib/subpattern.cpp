@@ -316,6 +316,16 @@ struct Gauss2dPlaneDirectError {
 };
 
 
+template<typename T> T cos_sq(const T &a)
+{
+  return cos(a)*cos(a);
+}
+
+template<typename T> T sin_sq(const T &a)
+{
+  return sin(a)*sin(a);
+}
+
 struct GenGauss2dPlaneDirectError {
   GenGauss2dPlaneDirectError(int val, int x, int y, double w, double h, double px, double py, double sw)
       : val_(val), x_(x), y_(y), w_(w), h_(h), px_(px), py_(py), sw_(sw){}
@@ -332,7 +342,7 @@ struct GenGauss2dPlaneDirectError {
     T dy = T(y_) - T(py_);
     T sx2 = T(2.0)*p[3]*p[3];
     //max angle ~70°
-    T sigma_y = abs(p[3])*T(1.25)+T(0.75)*sin(p[7]);
+    T sigma_y = abs(p[3])*(T(1.25)+T(0.75)*sin(p[7]));
     T sy2 = T(2.0)*sigma_y*sigma_y;
     T xy2 = x2*y2;
     x2 = x2*x2;
@@ -341,13 +351,12 @@ struct GenGauss2dPlaneDirectError {
     /*residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
                         (p[2]-p[4])*exp(-abs(x2/sx2/*-xy2*p[8]+y2/sy2))))/**(T(1)+1.0*max(p[7]/p[3],p[3]/p[7]))+1e-18)
                    *T(sw_);*/
-                   
-    T a = cos(p[8])*cos(p[8])/sx2 + sin(p[8])*sin(p[8])/sy2;
-    T b = sin(T(2)*p[8])*sin(T(2)*p[8])/sx2 + sin(T(2)*p[8])*sin(T(2)*p[8])/sy2;
-    T c = sin(p[8])*sin(p[8])/sx2+cos(p[8])*cos(p[8])/sy2;
+    T a = cos_sq(p[8])/sx2 + sin_sq(p[8])/sy2;
+    T b = -sin_sq(T(2)*p[8])/(T(2)*sx2) + sin_sq(T(2)*p[8])/(T(2)*sy2);
+    T c = sin_sq(p[8])/sx2+cos_sq(p[8])/sy2;
     
     residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
-                        (p[2]-p[4])*exp(-abs(a*x2-T(2)*b*xy2+c*y2))))*(T(1)+T(1.0)*(max(abs(sigma_y/p[3]),abs(p[3]/sigma_y))))+1e-18)
+                        (p[2]-p[4])*exp(-(a*x2-T(2)*b*xy2+c*y2))))*(T(1)/*+T(sigma_anisotropy_penalty)*(max(abs(sigma_y/p[3]),abs(p[3]/sigma_y)))*/)+1e-18)
                    *T(sw_);
     
     return true;
@@ -529,17 +538,18 @@ static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i 
       
       double sx2 = 2.0*p[3]*p[3];
       //double sy2 = 2.0*p[7]*p[7];
-      double sigma_y = p[3]*1.25+0.75*sin(p[7]);
+      double sigma_y = abs(p[3])*(1.25+0.75*sin(p[7]));
+      //double sigma_y = abs(p[3])*2.125+1.875*sin(p[7]);
       double sy2 = 2.0*sigma_y*sigma_y;
       double xy2 = x2*y2;
       x2 = x2*x2;
       y2 = y2*y2;
       
-      double a = cos(p[8])*cos(p[8])/sx2 + sin(p[8])*sin(p[8])/sy2;
-      double b = sin(2*p[8])*sin(2*p[8])/sx2 + sin(2*p[8])*sin(2*p[8])/sy2;
-      double c = sin(p[8])*sin(p[8])/sx2+cos(p[8])*cos(p[8])/sy2;
+      double a = cos_sq(p[8])/sx2 + sin_sq(p[8])/sy2;
+      double b = -sin_sq(2*p[8])/(2*sx2) + sin_sq(2*p[8])/(2*sy2);
+      double c = sin_sq(p[8])/sx2+cos_sq(p[8])/sy2;
       
-      ptr[y*w+x] = clamp<int>(p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-abs(a*x2-2*b*xy2+c*y2)), 0, 255);
+      ptr[y*w+x] = clamp<int>(p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-(a*x2-2*b*xy2+c*y2)), 0, 255);
     }
 }
 
@@ -692,15 +702,18 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   if (size.x >= 6)
     max_sigma_px = size.x*max_sigma;  
   
-  if (abs(params[3]) >= max_sigma_px)
+  double sigma_y = abs(params[3])*(1.25+0.75*sin(params[7]));
+  //double sigma_y = abs(params[3])*2.125+1.875*sin(params[7]);
+      
+  if (abs(params[3])+sigma_y >= 2*max_sigma_px)
     return FLT_MAX;
   if (abs(params[3]) <= min_sigma_px)
     return FLT_MAX;
   
-  double sigma_y = abs(params[3])*1.25+0.75*sin(params[7]);
-  if (abs(sigma_y) >= max_sigma_px)
-    return FLT_MAX;
   if (abs(sigma_y) <= min_sigma_px)
+    return FLT_MAX;
+  
+  if (max(abs(params[3])/sigma_y,sigma_y/abs(params[3])) >= max_sigma_diff)
     return FLT_MAX;
   
   if (retry_allowed) 
