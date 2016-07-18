@@ -1535,9 +1535,9 @@ void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner>
     
     
     for(int l=0;l<limits.size();l++)
-      scaled_limits[i] = Rect(limits[l].tl().x*mul*5,limits[l].tl().y*mul*5,limits[l].size().width*mul*5,limits[l].size().height*mul*5);
+      scaled_limits[l] = Rect(limits[l].tl().x*mul*5,limits[l].tl().y*mul*5,limits[l].size().width*mul*5,limits[l].size().height*mul*5);
       
-    hdmarker_subpattern_step(img , ca, cb, in_idx_step, 0.0, 5, 0, true, paint, mask_2x2, page, checkrange, limits, false, mul*5);
+    hdmarker_subpattern_step(img , ca, cb, in_idx_step, 0.0, 5, 0, true, paint, mask_2x2, page, checkrange, scaled_limits, false, mul*5);
     in_idx_step = 1;
     
     if (cb.size() <= ca.size()) {
