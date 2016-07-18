@@ -301,7 +301,7 @@ struct Gauss2dPlaneDirectError {
     x2 = x2*x2;
     y2 = y2*y2;
 
-    residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-(x2/sx2+y2/sx2))))+1e-12)*T(sw_);
+    residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-(x2/sx2+y2/sx2))))+T(1e-18))*T(sw_);
     
     return true;
   }
@@ -355,10 +355,10 @@ struct GenGauss2dPlaneDirectError {
                    *T(sw_);*/
     T a = cos_sq(p[8])/sx2 + sin_sq(p[8])/sy2;
     T b = -sin_sq(T(2)*p[8])/(T(2)*sx2) + sin_sq(T(2)*p[8])/(T(2)*sy2);
-    T c = sin_sq(p[8])/sx2+cos_sq(p[8])/sy2;
+    T c = sin_sq(p[8])/sx2 + cos_sq(p[8])/sy2;
     
     residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
-                        (p[2]-p[4])*exp(-(a*x2-T(2)*b*xy2+c*y2))))*(T(1)/*+T(sigma_anisotropy_penalty)*(max(abs(sigma_y/p[3]),abs(p[3]/sigma_y)))*/)+1e-18)
+                        (p[2]-p[4])*exp(-(a*x2-T(2)*b*xy2+c*y2))))*(T(1)+T(sigma_anisotropy_penalty)*(max(abs(sigma_y/p[3]),abs(p[3]/sigma_y))))+T(1e-18))
                    *T(sw_);
     
     return true;
@@ -388,14 +388,16 @@ struct PersGauss2dPlaneDirectError {
     T x = T(x_) - (T(px_)+sin(p[0])*T(w_*subfit_max_range));
     T y = T(y_) - (T(py_)+sin(p[1])*T(h_*subfit_max_range));
     
+    T z = p[9];//T(1000);
+    
     T rot[3] = {p[7], p[8], T(0)};
     //T rot[3] = {T(0), T(0), T(0)};
-    T pt[3] = {x*p[9], y*p[9], p[9]};
+    T pt[3] = {x*z, y*z, z};
     
     ceres::AngleAxisRotatePoint(rot, pt, pt);
     
-    T x2 = pt[0]/abs(pt[2]+1e-18);
-    T y2 = pt[1]/abs(pt[2]+1e-18);
+    T x2 = pt[0]/abs(pt[2]+T(1e-18));
+    T y2 = pt[1]/abs(pt[2]+T(1e-18));
     
     T dx = T(x_) - T(px_);
     T dy = T(y_) - T(py_);
@@ -404,7 +406,7 @@ struct PersGauss2dPlaneDirectError {
     y2 = y2*y2;
 
     residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
-                        (p[2]-p[4])*exp(-(x2/sx2+y2/sx2))))+1e-18)
+                        (p[2]-p[4])*exp(-(x2/sx2+y2/sx2))))+T(1e-18)+abs(0.1*p[7])+abs(0.1*p[8])+abs(T(100)/z))
                    *T(sw_);
     
     return true;
@@ -578,8 +580,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
     params = params_static;
   
   //x,y
-  params[0] = 0.0;
-  params[1] = 0.0;
+  params[0] = 1024.0*M_PI;
+  params[1] = 1024.0*M_PI;
   
   Rect area(p.x+0.5-hw.x+b.x, p.y+0.5-hw.y+b.y, r_size.x-2*b.x+0.5, r_size.y-2*b.y+0.5);
   
@@ -656,9 +658,9 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   //std::cout << summary.FullReport() << "\n";
   
   //for GenGauss2dPlaneDirectError
-  params[7] = params[3];
-  params[8] = 2*M_PI;
-  params[9] = 1000000000;
+  params[7] = 4.0*M_PI;
+  params[8] = 4.0*M_PI;
+  params[9] = 1000;
   
   ceres::Problem problem_gauss_plane;
   for(y=area.y;y<=area.br().y;y++)
