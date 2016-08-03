@@ -340,8 +340,8 @@ struct GenGauss2dPlaneDirectError {
                   T* residuals) const {
     T x2 = T(x_) - (T(px_)+sin(p[0])*T(w_*subfit_max_range));
     T y2 = T(y_) - (T(py_)+sin(p[1])*T(h_*subfit_max_range));
-    T dx = T(x_) - T(px_);
-    T dy = T(y_) - T(py_);
+    T dx = x2;
+    T dy = y2;
     T sx2 = T(2.0)*p[3]*p[3];
     //max angle ~70°
     T sigma_y = abs(p[3])*(T(1.25)+T(0.75)*sin(p[7]));
@@ -437,24 +437,24 @@ struct OrthoGauss2dPlaneDirectError {
     T x = T(x_) - (T(px_)+sin(p[0])*T(w_*subfit_max_range));
     T y = T(y_) - (T(py_)+sin(p[1])*T(h_*subfit_max_range));
     
-    T rot[3] = {sin(p[7]), T(1)-sin(p[7]), T(0)};
+    T d = sin(p[7]);
+    T rot[3] = {d, T(1)-d, T(0)};
     //max rotataion of +-1
     rot[0] *= sin(p[8]);
     rot[1] *= sin(p[8]); 
-    T pt[3] = {x, y, T(1)};
+    T pt[3] = {x, y, T(0)};
+    T pt2[3];
     
-    ceres::AngleAxisRotatePoint(rot, pt, pt);
+    ceres::AngleAxisRotatePoint(rot, pt, pt2);
     
-    T x2 = pt[0];
-    T y2 = pt[1];
+    T x2 = pt2[0];
+    T y2 = pt2[1];
     
-    T dx = T(x_) - T(px_);
-    T dy = T(y_) - T(py_);
     T sx2 = T(2.0)*p[3]*p[3];
     x2 = x2*x2;
     y2 = y2*y2;
 
-    residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
+    residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*x + p[6]*y + 
                         (p[2]-p[4])*exp(-(x2/sx2+y2/sx2))))+1e-18)
                    *T(sw_);
     
