@@ -32,7 +32,7 @@ static const double subfit_max_range = 0.2;
 static const double fit_gauss_max_tilt = 2.0;
 static const float max_size_diff = 1.0;
 static const float max_sigma_diff = 4.0;
-static const float gauss_sample_weight_crop = 0.3;
+static const float gauss_sample_weight_crop = 0.1;
 //static const float sigma_anisotropy_penalty = 0.0;
 static const double rms_size_mul_max = 10.0;
 
