@@ -32,6 +32,7 @@ static const double subfit_max_range = 0.2;
 static const double fit_gauss_max_tilt = 2.0;
 static const float max_size_diff = 1.0;
 static const float max_sigma_diff = 4.0;
+static const float gauss_sample_weight_crop = 0.3;
 //static const float sigma_anisotropy_penalty = 0.0;
 static const double rms_size_mul_max = 10.0;
 
@@ -490,7 +491,7 @@ struct Gauss2dDirectCenterError {
     x2 = x2*x2;
     y2 = y2*y2;
 
-    residuals[0] = (T(val_) - (p[2] + (p[0]-p[2])*exp(-(x2/s2+y2/s2))))*(T(sw_)+T(0.5));
+    residuals[0] = (T(val_) - (p[2] + (p[0]-p[2])*exp(-(x2/s2+y2/s2))))*T(sw_);
     
     return true;
   }
@@ -644,6 +645,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
         y2 = y2*y2;
         double ss2 = mul_size_sigma*(size.x*size.x+size.y*size.y);
         double sw = (1.0-bg_weight)*exp(-x2/ss2-y2/ss2) + bg_weight;
+        if (sw*sw <= gauss_sample_weight_crop)
+          continue;
         ceres::CostFunction* cost_function = Gauss2dDirectCenterError::Create(ptr[y*w+x], x, y, p.x, p.y, sw);
         problem_gauss_center.AddResidualBlock(cost_function, NULL, params+2);
       }
@@ -674,6 +677,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
         y2 = y2*y2;
         double ss2 = mul_size_sigma*(size.x*size.x+size.y*size.y);
         double sw = (1.0-bg_weight)*exp(-x2/ss2-y2/ss2) + bg_weight;
+        if (sw*sw <= gauss_sample_weight_crop)
+          continue;
         //ceres::CostFunction* cost_function = Gauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
         ceres::CostFunction* cost_function = GenGauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
         //ceres::CostFunction* cost_function = PersGauss2dPlaneDirectError::Create(ptr[y*w+x], x, y, size.x, size.y, p.x, p.y, sw);
