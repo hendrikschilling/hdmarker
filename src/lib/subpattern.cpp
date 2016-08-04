@@ -23,7 +23,7 @@ namespace hdmarker {
 static const float min_fit_contrast = 1.0;
 static const float min_fitted_contrast = 3.0; //minimum amplitude of fitted gaussian
 //static const float min_fit_contrast_gradient = 0.05;
-static const float rms_use_limit = 10.0;
+static const float rms_use_limit = 15.0;
 static const float recurse_min_len = 3.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 2;
@@ -32,18 +32,20 @@ static const double subfit_max_range = 0.2;
 static const double fit_gauss_max_tilt = 2.0;
 static const float max_size_diff = 1.0;
 static const float max_sigma_diff = 4.0;
-static const float sigma_anisotropy_penalty = 0.0;
+//static const float sigma_anisotropy_penalty = 0.0;
+static const double rms_size_mul_max = 10.0;
 
 static int safety_border = 2;
 
 static const double bg_weight = 0.0;
-static const double mul_size_sigma = 0.3;
+static const double mul_size_sigma = 0.125;
 static const double tilt_max_rms_penalty = 9.0;
 static const double border_frac = 0.15;
 
 static const float max_retry_dist = 0.1;
 
-static const float max_sigma = 0.25;
+static const float max_sigma_10 = 0.15;
+static const float max_sigma_20 = 0.25;
 static const float min_sigma_px = 0.45;
 //FIXME add possibility to reject too small sigma (less than ~one pixel (or two for bayer))
 
@@ -357,8 +359,8 @@ struct GenGauss2dPlaneDirectError {
     T b = -sin_sq(T(2)*p[8])/(T(2)*sx2) + sin_sq(T(2)*p[8])/(T(2)*sy2);
     T c = sin_sq(p[8])/sx2 + cos_sq(p[8])/sy2;
     
-    residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
-                        (p[2]-p[4])*exp(-(a*x2-T(2)*b*xy2+c*y2))))*(T(1)+T(sigma_anisotropy_penalty)*(max(abs(sigma_y/p[3]),abs(p[3]/sigma_y))))+T(1e-18))
+    residuals[0] = (T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
+                        (p[2]-p[4])*exp(-(a*x2-T(2)*b*xy2+c*y2))))/**(T(1)+T(sigma_anisotropy_penalty)*(max(abs(sigma_y/p[3]),abs(p[3]/sigma_y)))*/
                    *T(sw_);
     
     return true;
@@ -702,9 +704,17 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   if (params[4] < 0 || params[4] > 255)
     return FLT_MAX;
   
-  double max_sigma_px = size.x*max_sigma*(std::min(contrast, 20.0)/20.0);
-  if (size.x >= 6)
-    max_sigma_px = size.x*max_sigma;  
+  double max_sigma_px = size.x*max_sigma_10*(std::min(contrast, 20.0)/20.0);
+  if (size.x >= 6) {
+    if (size.x <= 10)
+      max_sigma_px = size.x*max_sigma_10;
+    else if (size.x >= 20)
+      max_sigma_px = size.x*max_sigma_20;
+    else {
+      float frac = (size.x-10)/(20-10);
+      max_sigma_px = size.x*(max_sigma_10*(1-frac)+max_sigma_20*frac);
+    }
+  }
   
   double sigma_y = abs(params[3])*(1.25+0.75*sin(params[7]));
   //double sigma_y = abs(params[3])*2.125+1.875*sin(params[7]);
@@ -924,7 +934,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
         checked++;
         double rms = fit_gauss_direct(img, Point2f(maxlen*0.2, maxlen*0.2), refine_p, params, mask_2x2);
         
-        if (rms >= rms_use_limit*min(maxlen*0.2,10.0)) {
+        if (rms >= rms_use_limit*min(maxlen*0.2,rms_size_mul_max)) {
             Interpolated_Corner c_i(extr_id, refine_p, false);
 #pragma omp critical (__blacklist__)
             blacklist[id_to_key(extr_id)].push_back(p_cp);
