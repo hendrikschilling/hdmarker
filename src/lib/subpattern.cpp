@@ -23,7 +23,7 @@ namespace hdmarker {
 static const float min_fit_contrast = 1.0;
 static const float min_fitted_contrast = 3.0; //minimum amplitude of fitted gaussian
 //static const float min_fit_contrast_gradient = 0.05;
-static const float rms_use_limit = 15.0;
+static const float rms_use_limit = 10.0;
 static const float recurse_min_len = 3.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 2;
@@ -34,7 +34,7 @@ static const float max_size_diff = 1.0;
 static const float max_sigma_diff = 4.0;
 static const float gauss_sample_weight_crop = 0.1;
 //static const float sigma_anisotropy_penalty = 0.0;
-static const double rms_size_mul_max = 10.0;
+static const double rms_size_mul_max = 20.0;
 
 static int safety_border = 2;
 
@@ -740,7 +740,9 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   
   //printf("gauss: %f / %f / %f\n", params[3], sigma_y, params[8]);
 
-  return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*255.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt);
+  double scale_f = 1.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt);
+  
+  return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*scale_f;
 }
 
 uint64_t id_to_key(Point2i id)
