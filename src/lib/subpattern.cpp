@@ -23,24 +23,24 @@ namespace hdmarker {
 static const float min_fit_contrast = 1.0;
 static const float min_fitted_contrast = 3.0; //minimum amplitude of fitted gaussian
 //static const float min_fit_contrast_gradient = 0.05;
-static const float rms_use_limit = 10.0;
+static const float rms_use_limit = 5.0/255.0;
 static const float recurse_min_len = 3.0;
 static const int int_search_range = 11;
 static const int int_extend_range = 2;
 static const float extent_range_limit_size = 8;
 static const double subfit_max_range = 0.2;
-static const double fit_gauss_max_tilt = 2.0;
+static const double fit_gauss_max_tilt = 0.1;
 static const float max_size_diff = 1.0;
 static const float max_sigma_diff = 4.0;
-static const float gauss_sample_weight_crop = 0.1;
-//static const float sigma_anisotropy_penalty = 0.0;
+static const float gauss_sample_weight_crop = 0.2;
+static const float sigma_anisotropy_penalty = 0.2;
 static const double rms_size_mul_max = 20.0;
 
 static int safety_border = 2;
 
 static const double bg_weight = 0.0;
 static const double mul_size_sigma = 0.125;
-static const double tilt_max_rms_penalty = 9.0;
+static const double tilt_max_rms_penalty = 10.0;
 static const double border_frac = 0.15;
 
 static const float max_retry_dist = 0.1;
@@ -48,6 +48,7 @@ static const float max_retry_dist = 0.1;
 static const float max_sigma_10 = 0.15;
 static const float max_sigma_20 = 0.25;
 static const float min_sigma_px = 0.45;
+static const float min_sigma = 0.1;
 //FIXME add possibility to reject too small sigma (less than ~one pixel (or two for bayer))
 
 static const int min_fit_data_points = 16;
@@ -353,15 +354,12 @@ struct GenGauss2dPlaneDirectError {
     x2 = x2*x2;
     y2 = y2*y2;
 
-    /*residuals[0] = sqrt(abs(T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
-                        (p[2]-p[4])*exp(-abs(x2/sx2/*-xy2*p[8]+y2/sy2))))/**(T(1)+1.0*max(p[7]/p[3],p[3]/p[7]))+1e-18)
-                   *T(sw_);*/
     T a = cos_sq(p[8])/sx2 + sin_sq(p[8])/sy2;
     T b = -sin_sq(T(2)*p[8])/(T(2)*sx2) + sin_sq(T(2)*p[8])/(T(2)*sy2);
     T c = sin_sq(p[8])/sx2 + cos_sq(p[8])/sy2;
     
     residuals[0] = (T(val_) - (p[4] + p[5]*dx + p[6]*dy + 
-                        (p[2]-p[4])*exp(-(a*x2-T(2)*b*xy2+c*y2))))/**(T(1)+T(sigma_anisotropy_penalty)*(max(abs(sigma_y/p[3]),abs(p[3]/sigma_y)))*/
+                        (p[2]-p[4])*exp(-(a*x2-T(2)*b*xy2+c*y2))))*(T(1)+T(sigma_anisotropy_penalty)*(max(abs(sigma_y/p[3]),abs(p[3]/sigma_y))))
                    *T(sw_);
     
     return true;
@@ -643,6 +641,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
         double y2 = y-p.y;
         x2 = x2*x2;
         y2 = y2*y2;
+        if (x2+y2 >= size.x*size.x*0.25)
+          continue;
         double ss2 = mul_size_sigma*(size.x*size.x+size.y*size.y);
         double sw = (1.0-bg_weight)*exp(-x2/ss2-y2/ss2) + bg_weight;
         if (sw*sw <= gauss_sample_weight_crop)
@@ -675,6 +675,8 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
         double y2 = y-p.y;
         x2 = x2*x2;
         y2 = y2*y2;
+        if (x2+y2 >= size.x*size.x*0.25)
+          continue;
         double ss2 = mul_size_sigma*(size.x*size.x+size.y*size.y);
         double sw = (1.0-bg_weight)*exp(-x2/ss2-y2/ss2) + bg_weight;
         if (sw*sw <= gauss_sample_weight_crop)
@@ -732,15 +734,25 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   if (abs(sigma_y) <= min_sigma_px)
     return FLT_MAX;
   
+  
+  if (abs(params[3]) <= min_sigma)
+    return FLT_MAX;
+  
+  if (abs(sigma_y) <= min_sigma)
+    return FLT_MAX;
+  
   if (max(abs(params[3])/sigma_y,sigma_y/abs(params[3])) >= max_sigma_diff)
     return FLT_MAX;
   
+  if ((abs(params[5])+abs(params[6]))/(contrast*size.x) > fit_gauss_max_tilt)
+    return FLT_MAX;
+    
   if (retry_allowed) 
     return fit_gauss_direct(img, size, p, params, mask_2x2, false);
   
   //printf("gauss: %f / %f / %f\n", params[3], sigma_y, params[8]);
 
-  double scale_f = 1.0/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt);
+  double scale_f = (max(abs(params[3]),sigma_y)/size.x-min_sigma*0.5)/contrast*(1.0+tilt_max_rms_penalty*(abs(params[5])+abs(params[6]))/fit_gauss_max_tilt);
   
   return sqrt(summary.final_cost/problem_gauss_plane.NumResiduals())*scale_f;
 }
@@ -1130,6 +1142,11 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         Matx31f px = Matx33f(pers)*Matx31f(1, 0, 0);
         Matx31f py = Matx33f(pers)*Matx31f(0, 1, 0);
         Matx31f p_scale = Matx33f(pers)*Matx31f(1/sqrt(2), 1/sqrt(2), 0);
+        
+        //happens...
+        if (projected(2) == 0)
+          continue;
+        
         Point2f refine_p(projected(0)/projected(2),projected(1)/projected(2));
         
         float size = size_from_pers(pers, idx_step, extr_id, projected);
