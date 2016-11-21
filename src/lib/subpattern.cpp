@@ -25,7 +25,7 @@ static const float min_fitted_contrast = 3.0; //minimum amplitude of fitted gaus
 //static const float min_fit_contrast_gradient = 0.05;
 static const float rms_use_limit = 5.0/255.0;
 static const float recurse_min_len = 3.0;
-static const int int_search_range = 11;
+static const int int_search_range = 2;
 static const int int_extend_range = 2;
 static const float extent_range_limit_size = 8;
 static const double subfit_max_range = 0.2;
@@ -45,13 +45,14 @@ static const double border_frac = 0.15;
 
 static const float max_retry_dist = 0.1;
 
-static const float max_sigma_10 = 0.15;
-static const float max_sigma_20 = 0.25;
-static const float min_sigma_px = 0.45;
+static const float max_sigma_10 = 0.8;
+static const float max_sigma_20 = 0.8;
+static const float min_sigma_px = 0.6; //FIXME lower for non-bayer!
 static const float min_sigma = 0.1;
+
 //FIXME add possibility to reject too small sigma (less than ~one pixel (or two for bayer))
 
-static const int min_fit_data_points = 16;
+static const int min_fit_data_points = 9;
 
 cv::Mat gt_c, gt_r, gt_t;
 bool eval_gt = false;
@@ -624,15 +625,16 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   params[5] = 0.0;
   params[6] = 0.0;
   
-  int count = 0;
+  /*int count = 0;
   for(y=area.y;y<=area.br().y;y++)
     for(x=area.x;x<=area.br().x;x++)
       if (!mask_2x2 || mask_2x2[(y%2)*2+(x%2)])
         count++;
 
   if (count < min_fit_data_points)
-    return FLT_MAX;
+    return FLT_MAX;*/
   
+  double wsum = 0;
   ceres::Problem problem_gauss_center;
   for(y=area.y;y<=area.br().y;y++)
     for(x=area.x;x<=area.br().x;x++)
@@ -647,9 +649,13 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
         double sw = (1.0-bg_weight)*exp(-x2/ss2-y2/ss2) + bg_weight;
         if (sw*sw <= gauss_sample_weight_crop)
           continue;
+        wsum += sw;
         ceres::CostFunction* cost_function = Gauss2dDirectCenterError::Create(ptr[y*w+x], x, y, p.x, p.y, sw);
         problem_gauss_center.AddResidualBlock(cost_function, NULL, params+2);
       }
+      
+  if (wsum < min_fit_data_points)
+    return FLT_MAX;
   
   ceres::Solver::Options options;
   options.max_num_iterations = 100;
@@ -726,12 +732,24 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   double sigma_y = abs(params[3])*(1.25+0.75*sin(params[7]));
   //double sigma_y = abs(params[3])*2.125+1.875*sin(params[7]);
       
+  float min_sigma_px_b = min_sigma_px;
+  if (mask_2x2) {
+    int bcount = 0;
+    for(int i=0;i<4;i++)
+      if (mask_2x2[i])
+        bcount++;
+    if (bcount == 1)
+      min_sigma_px_b *= 2;
+    else if (bcount == 2)
+      min_sigma_px_b *= sqrt(2);
+  }
+  
   if (abs(params[3])+sigma_y >= 2*max_sigma_px)
     return FLT_MAX;
-  if (abs(params[3]) <= min_sigma_px)
+  if (abs(params[3]) <= min_sigma_px_b)
     return FLT_MAX;
   
-  if (abs(sigma_y) <= min_sigma_px)
+  if (abs(sigma_y) <= min_sigma_px_b)
     return FLT_MAX;
   
   

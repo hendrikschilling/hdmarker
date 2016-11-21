@@ -117,6 +117,7 @@ class Marker {
     void getPoints(cv::Point2f p[4], cv::Point2i c[4]);
     void getCorners(Marker_Corner c[4]);
     Marker(cv::Mat input, cv::Mat img, double marker_score, Marker_Corner *p1, Marker_Corner *p2, Marker_Corner *p3, float scale, int inpage = -1, int inid = -1);
+    Marker(cv::Mat input, cv::Mat img, double marker_score, Marker_Corner *p1, Marker_Corner *p2, Marker_Corner *p3, Marker_Corner *p4, float scale, int inpage = -1, int inid = -1);
     void filterPoints(Gridstore *candidates, float scale);
     void filter(Gridstore *candidates, std::vector<Marker> &markers, float scale);
     void neighbours_inc(Gridstore *candidates, float scale);
@@ -125,12 +126,12 @@ class Marker {
     Marker operator=(Marker m);
     
     static void init(void);
-    static void detect_scale(std::vector<cv::Mat> imgs, std::vector<cv::Mat> norms, std::vector<cv::Mat> checkers, std::vector<Marker> &markers, float scale, float effort = 0.5);
+    static void detect_scale(std::vector<cv::Mat> imgs, std::vector<cv::Mat> norms, std::vector<cv::Mat> checkers, std::vector<Marker> &markers, float scale, float effort = 0.5, int inpage = -1);
     //static void detect(cv::Mat &img, std::vector<Marker> &markers);
     //static void detect(cv::Mat &img, std::vector<Corner> &corners);
     //static void detect_minscale(cv::Mat &img, cv::Mat &paint, std::vector<Corner> &corners, int scale_min = 8);
-    static void detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_max = 0, int marker_size_min = 5, float effort = 0.5, int mincount = 10, std::vector<cv::Mat> *scales = NULL, std::vector<cv::Mat> *scales_border = NULL);
-    static void detect(cv::Mat img, std::vector<Corner> &corners, bool use_rgb = false, int marker_size_max = 0, int marker_size_min = 5, float effort = 0.5, int mincount = 10);
+    static void detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_max = 0, int marker_size_min = 5, float effort = 0.5, int mincount = 10, std::vector<cv::Mat> *scales = NULL, std::vector<cv::Mat> *scales_border = NULL, int inpage = -1);
+    static void detect(cv::Mat img, std::vector<Corner> &corners, bool use_rgb = false, int marker_size_max = 0, int marker_size_min = 5, float effort = 0.5, int mincount = 10, int inpage = -1);
     static void detect_minscale(cv::Mat &img, cv::Mat &paint, std::vector<Corner> &corners, int scale_min = 8);
 };
 
