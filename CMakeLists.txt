@@ -39,16 +39,18 @@ dep_lists_append(Ceres)
 
 
 dep_lists_pkg_search()
-set(${PNU}_HEADERS src/lib/hdmarker.hpp src/lib/subpattern.hpp src/lib/gridstore.hpp)
+set(${_PNU}_HEADERS src/lib/hdmarker.hpp src/lib/subpattern.hpp src/lib/gridstore.hpp)
 dep_lists_prepare_env()
+
+message("hdmnarker should use oipencv inc: ${OpenCV_INCLUDE_DIRS}")
 
 #####################################################
 ## COMPILE
 #####################################################
 add_library(hdmarker src/lib/hdmarker.cpp src/lib/gridstore.cpp src/lib/timebench.cpp src/lib/subpattern.cpp)
-target_link_libraries(hdmarker PUBLIC ${${PNU}_LIB})
-target_link_libraries(hdmarker PRIVATE ${${PNU}_PRIVATE_LIB})
-list(APPEND ${PNU}_EXPORT_LIBS hdmarker)
+target_link_libraries(hdmarker PUBLIC ${${_PNU}_LIB})
+target_link_libraries(hdmarker PRIVATE ${${_PNU}_PRIVATE_LIB})
+list(APPEND ${_PNU}_EXPORT_LIBS hdmarker)
 
 #####################################################
 ## INSTALL
