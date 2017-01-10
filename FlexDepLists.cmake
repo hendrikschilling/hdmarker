@@ -2,7 +2,7 @@
 ## VARIABLE DOCUMENTATION
 #####################################################
 #Meta:
-#  PNU              - project name in uppercase - prefixed to (nearly) all variables. e.g. ${PNU}_PKG, etc.
+#  _PNU              - project name in uppercase - prefixed to (nearly) all variables. e.g. ${_PNU}_PKG, etc.
 #
 #Dependencies (packages and respective cmake variables)
 #  _PKG               - required cmake package names - passed to find_package() - will also be included from ...Config.cmake
@@ -66,8 +66,8 @@ if (NOT WIN32)
 endif()
 
 function(dep_lists_pkg_found PKG RET)
-  string(TOLOWER ${PKG} LOW)
-  string(TOUPPER ${PKG} UP)
+  string(TOLOWER ${PKG} _LOW)
+  string(TOUPPER ${PKG} _UP)
   
   set(${RET} FALSE PARENT_SCOPE)
   
@@ -75,17 +75,17 @@ function(dep_lists_pkg_found PKG RET)
     set(${RET} TRUE PARENT_SCOPE)
       return()
   endif()
-  if (${LOW}_FOUND)
+  if (${_LOW}_FOUND)
     set(${RET} TRUE PARENT_SCOPE)
       return()
   endif()
-  if (${UP}_FOUND)
+  if (${_UP}_FOUND)
     set(${RET} TRUE PARENT_SCOPE)
       return()
   endif()
   
-  if (${PNU}_${PKG}_FOUND_INDICATOR)
-    if (${${PNU}_${PKG}_FOUND_INDICATOR})
+  if (${_PNU}_${PKG}_FOUND_INDICATOR)
+    if (${${_PNU}_${PKG}_FOUND_INDICATOR})
       set(${RET} TRUE PARENT_SCOPE)
       return()
     endif()
@@ -137,9 +137,9 @@ macro(dep_lists_parse _dlp_NAME _dlp_OPTS _dlp_SINGLE _dlp_MULTI)
   endforeach()
 endmacro()
 
-#if components are specified those are serialized into ${PNU}_PKG_COMPONENTS
-macro(dep_lists_check_find PACKAGE RET PNU)
-  if (FDP_HAVE_SEARCHED_${PACKAGE} AND "${FDP_HAVE_SEARCHED_${PACKAGE}_COMPONENTS}" STREQUAL "${${PNU}_${PACKAGE}_COMPONENTS}")
+#if components are specified those are serialized into ${_PNU}_PKG_COMPONENTS
+macro(dep_lists_check_find PACKAGE RET _PNU)
+  if (FDP_HAVE_SEARCHED_${PACKAGE} AND "${FDP_HAVE_SEARCHED_${PACKAGE}_COMPONENTS}" STREQUAL "${${_PNU}_${PACKAGE}_COMPONENTS}")
     #message("already searched for ${PACKAGE}")
     if(FDP_HAVE_FOUND_${PACKAGE})
       set(${RET} TRUE)
@@ -149,12 +149,12 @@ macro(dep_lists_check_find PACKAGE RET PNU)
   else()
     dep_lists_msg_info("search ${PACKAGE}")
     set(FDP_HAVE_SEARCHED_${PACKAGE} true)
-    set(FDP_HAVE_SEARCHED_${PACKAGE}_COMPONENTS ${${PNU}_${PACKAGE}_COMPONENTS})
+    set(FDP_HAVE_SEARCHED_${PACKAGE}_COMPONENTS ${${_PNU}_${PACKAGE}_COMPONENTS})
     
-    if (${PNU}_${PACKAGE}_COMPONENTS)
-      find_package(${PACKAGE} QUIET COMPONENTS ${${PNU}_${PACKAGE}_COMPONENTS} ${${PNU}_${PACKAGE}_FIND_FLAGS})
+    if (${_PNU}_${PACKAGE}_COMPONENTS)
+      find_package(${PACKAGE} QUIET COMPONENTS ${${_PNU}_${PACKAGE}_COMPONENTS} ${${_PNU}_${PACKAGE}_FIND_FLAGS})
     else()
-      find_package(${PACKAGE} QUIET ${${PNU}_${PACKAGE}_FIND_FLAGS})
+      find_package(${PACKAGE} QUIET ${${_PNU}_${PACKAGE}_FIND_FLAGS})
     endif()
     
     string(TOLOWER ${PACKAGE} PKG_LOW)
@@ -165,10 +165,10 @@ macro(dep_lists_check_find PACKAGE RET PNU)
     if (NOT FOUND)
       list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/find/${PKG_LOW})
       
-      if (${PNU}_${PACKAGE}_COMPONENTS)
-        find_package(${PACKAGE} QUIET COMPONENTS ${${PNU}_${PACKAGE}_COMPONENTS} ${${PNU}_${PACKAGE}_FIND_FLAGS})
+      if (${_PNU}_${PACKAGE}_COMPONENTS)
+        find_package(${PACKAGE} QUIET COMPONENTS ${${_PNU}_${PACKAGE}_COMPONENTS} ${${_PNU}_${PACKAGE}_FIND_FLAGS})
       else()
-        find_package(${PACKAGE} QUIET ${${PNU}_${PACKAGE}_FIND_FLAGS})
+        find_package(${PACKAGE} QUIET ${${_PNU}_${PACKAGE}_FIND_FLAGS})
       endif()
       
       dep_lists_pkg_found(${PACKAGE} FOUND)
@@ -177,12 +177,12 @@ macro(dep_lists_check_find PACKAGE RET PNU)
     if (FOUND)
       dep_lists_msg_info("found ${PACKAGE} - found")
       set(${RET} TRUE)
-      list(APPEND ${PNU}_FEATURES ${RET})
+      list(APPEND ${_PNU}_FEATURES ${RET})
       
-      if (${PNU}_${PACKAGE}_COMPONENTS)
-        foreach(COMPONENT ${${PNU}_${PACKAGE}_COMPONENTS})
-          list(APPEND ${PNU}_PKG_COMPONENTS "${PNU}_${PACKAGE}_COMPONENTS")
-          list(APPEND ${PNU}_PKG_COMPONENTS "${COMPONENT}")
+      if (${_PNU}_${PACKAGE}_COMPONENTS)
+        foreach(COMPONENT ${${_PNU}_${PACKAGE}_COMPONENTS})
+          list(APPEND ${_PNU}_PKG_COMPONENTS "${_PNU}_${PACKAGE}_COMPONENTS")
+          list(APPEND ${_PNU}_PKG_COMPONENTS "${COMPONENT}")
         endforeach()
       endif()
       
@@ -197,15 +197,15 @@ macro(dep_lists_check_find PACKAGE RET PNU)
   endif()
 endmacro()
 
-macro(dep_lists_exec_find PNU PKG SUCC FAIL)
+macro(dep_lists_exec_find _PNU PKG SUCC FAIL)
   cmake_policy(SET CMP0011 NEW)
   if (POLICY CMP0054)
     cmake_policy(SET CMP0054 NEW)
   endif()
 
   string(TOUPPER ${PKG} _FDP_PKG_UP)
-  dep_lists_check_find(${PKG} ${PNU}_WITH_${_FDP_PKG_UP} ${PNU})
-  if (${PNU}_WITH_${_FDP_PKG_UP})
+  dep_lists_check_find(${PKG} ${_PNU}_WITH_${_FDP_PKG_UP} ${_PNU})
+  if (${_PNU}_WITH_${_FDP_PKG_UP})
     if (NOT "${SUCC}" STREQUAL "")
       list(APPEND ${SUCC} ${PKG})
     endif()
@@ -248,8 +248,8 @@ macro(dep_lists_pkg_search)
     
   dep_lists_clean_list(${_FDP_PNU}_MISSING_REQUIRED)
   
-  foreach(VAR ${${_FDP_PREFIX}_EXPORT_VARS})
-    list(APPEND ${_FDP_PREFIX}_EXPORT_VARS_VALUES "VAR" "${VAR}")
+  foreach(VAR ${${_FDP_PNU}_EXPORT_VARS})
+    list(APPEND ${_FDP_PNU}_EXPORT_VARS_VALUES "${VAR}" "${${VAR}}")
   endforeach()
     
   if (${_FDP_PNU}_MISSING_OPTIONAL)
@@ -298,18 +298,21 @@ macro(dep_lists_prepare_env)
   #####################################################
   ## SET INCLUDES, LIBS, ... (public)
   #####################################################
+  message("inc var name list: ${_FDP_PNU}_PKG_INC ${${_FDP_PNU}_PKG_INC}")
+  
   foreach(INCLUDE ${${_FDP_PNU}_PKG_INC})
-    if (NOT ("${${INCLUDE}}" MATCHES ".*-NOTFOUND"))
+    if (${INCLUDE} AND NOT ("${${INCLUDE}}" MATCHES ".*-NOTFOUND"))
+      message("ADD INC DIR: ${INCLUDE} ${${INCLUDE}}")
       list(APPEND ${_FDP_PNU}_INC ${${INCLUDE}})
       list(APPEND ${_FDP_PNU}_PKG_INC_FOUND ${INCLUDE})
     else()
-      # FIXME remove including in deps!
+      message("MISSING: ${INCLUDE}")
     endif()
   endforeach()
   dep_lists_clean_list(${_FDP_PNU}_INC)
 
   foreach(LIBDIR ${${_FDP_PNU}_PKG_LINK})
-    if (NOT ("${${LIBDIR}}" MATCHES ".*-NOTFOUND"))
+    if (${LIBDIR} AND NOT ("${${LIBDIR}}" MATCHES ".*-NOTFOUND"))
       list(APPEND ${_FDP_PNU}_LINK ${${LIBDIR}})
       list(APPEND ${_FDP_PNU}_PKG_LINK_FOUND ${LIBDIR})
     else()
@@ -319,7 +322,7 @@ macro(dep_lists_prepare_env)
   dep_lists_clean_list(${_FDP_PNU}_LINK)
 
   foreach(LIB ${${_FDP_PNU}_PKG_LIB})
-    if (NOT ("${${LIB}}" MATCHES ".*-NOTFOUND"))
+    if (${LIB} AND NOT ("${${LIB}}" MATCHES ".*-NOTFOUND"))
       dep_lists_msg_info("add lib var content: ${LIB} : ${${LIB}}")
       list(APPEND ${_FDP_PNU}_LIB ${${LIB}})
       list(APPEND ${_FDP_PNU}_PKG_LIB_FOUND ${LIB})
@@ -330,13 +333,24 @@ macro(dep_lists_prepare_env)
   endforeach()
   # WARNING no dep_lists_clean_list because it can contain (repeated) build type specifiesr (like debug, optimized, ...)
   #dep_lists_clean_list(${_FDP_PNU}_LIB)
+  
+  foreach(T ${${_FDP_PNU}_PKG_TARGET})
+    if (TARGET ${T})
+      dep_lists_msg_info("add target: ${T}")
+      list(APPEND ${_FDP_PNU}_LIB ${T})
+      list(APPEND ${_FDP_PNU}_PKG_LIB_FOUND ${T})
+    else()
+      dep_lists_msg_info("target not found: ${T}")
+      # FIXME remove including in deps!
+    endif()
+  endforeach()
 
   #####################################################
   ## SET INCLUDES, LIBS, ... (private)
   #####################################################
 
   foreach(INCLUDE ${${_FDP_PNU}_PRIVATE_PKG_INC})
-    if (NOT ("${${INCLUDE}}" MATCHES ".*-NOTFOUND"))
+    if (${INCLUDE} AND NOT ("${${INCLUDE}}" MATCHES ".*-NOTFOUND"))
       list(APPEND ${_FDP_PNU}_PRIVATE_INC ${${INCLUDE}})
     else()
       # FIXME remove including in deps!
@@ -345,7 +359,7 @@ macro(dep_lists_prepare_env)
   dep_lists_clean_list(${_FDP_PNU}_PRIVATE_INC)
 
   foreach(LIBDIR ${${_FDP_PNU}_PRIVATE_PKG_LINK})
-    if (NOT ("${${LIBDIR}}" MATCHES ".*-NOTFOUND"))
+    if (${LIBDIR} AND NOT ("${${LIBDIR}}" MATCHES ".*-NOTFOUND"))
       list(APPEND ${_FDP_PNU}_PRIVATE_LINK ${${LIBDIR}})
     else()
       # FIXME remove including in deps!
@@ -354,7 +368,7 @@ macro(dep_lists_prepare_env)
   dep_lists_clean_list(${_FDP_PNU}_PRIVATE_LINK)
 
   foreach(LIB ${${_FDP_PNU}_PRIVATE_PKG_LIB})
-    if (NOT ("${${LIB}}" MATCHES ".*-NOTFOUND"))
+    if (${LIB} AND NOT ("${${LIB}}" MATCHES ".*-NOTFOUND"))
       list(APPEND ${_FDP_PNU}_PRIVATE_LIB ${${LIB}})
     else()
       # FIXME remove including in deps!
@@ -363,6 +377,13 @@ macro(dep_lists_prepare_env)
   # WARNING no dep_lists_clean_list because it can contain (repeated) build type specifiesr (like debug, optimized, ...)
   #dep_lists_clean_listdep_lists_clean_list(${_FDP_PNU}_PRIVATE_LIB)
 
+  foreach(T ${${_FDP_PNU}_PRIVATE_PKG_TARGET})
+    if (TARGET ${T})
+      list(APPEND ${_FDP_PNU}_PRIVATE_LIB ${T})
+    else()
+      # FIXME remove including in deps!
+    endif()
+  endforeach()
 
   #####################################################
   ## actually inc/link DIRS (from above)
@@ -377,9 +398,9 @@ macro(dep_lists_prepare_env)
     add_definitions(-D${F})
   endforeach()
   
-  list(APPEND ${_FDP_PNU}_LIBRARIES ${${_FDP_PNU}_LIB})
+  list(APPEND ${_FDP_PNU}_LIBRARIES ${${_FDP_PNU}_LIB} ${${_FDP_PNU}_EXTRA_LIBS})
   list(APPEND ${_FDP_PNU}_INCLUDE_DIRS ${${_FDP_PNU}_INC})
-  list(APPEND ${_FDP_PNU}_LIBRARY_DIRS ${${_FDP_PNU}_LIB})
+  list(APPEND ${_FDP_PNU}_LIBRARY_DIRS ${${_FDP_PNU}_LINK})
   
   string(TOLOWER ${_FDP_PNU} PNL)
   
@@ -409,6 +430,9 @@ macro(dep_lists_prepare_env)
     list(APPEND _FPD_HEADER_DEPLIST ${CMAKE_CURRENT_BINARY_DIR}/include/${_FDP_HEADER_PREFIX}/${_H})
   endforeach()
   
+  include_directories(${CMAKE_CURRENT_BINARY_DIR}/include/${_FDP_HEADER_PREFIX})
+  include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
+  
   dep_lists_msg_info("add target ${PNL}-header-export (${_FPD_HEADER_DEPLIST})")
   add_custom_target(${PNL}-header-export ALL DEPENDS ${_FPD_HEADER_DEPLIST})
 endmacro(dep_lists_prepare_env)
@@ -420,7 +444,7 @@ macro(dep_lists_append _FDP_NAME)
   endif()
 
   set(dep_lists_append_UNPARSED_ARGUMENTS "")
-  dep_lists_parse(dep_lists_append "OPTIONAL;PRIVATE" "PREFIX;FOUND_INDICATOR" "COMPONENTS;FIND_FLAGS" "${ARGN}")
+  dep_lists_parse(dep_lists_append "OPTIONAL;PRIVATE" "PREFIX;FOUND_INDICATOR;TARGET" "COMPONENTS;FIND_FLAGS" "${ARGN}")
   
   string(TOUPPER ${_FDP_NAME} _FDP_NAME_UPPER)
   
@@ -467,13 +491,14 @@ macro(dep_lists_append _FDP_NAME)
     set(_FDP_LIB ${_FDP_NAME_UPPER}_LIBRARIES)
   endif()
   
-  dep_lists_msg_info("PNU: ${_FDP_PREFIX}")
+  dep_lists_msg_info("_PNU: ${_FDP_PREFIX}")
   dep_lists_msg_info("NAME: ${_FDP_NAME}")
   dep_lists_msg_info("INC: ${_FDP_INC}")
   dep_lists_msg_info("LINK: ${_FDP_LINK}")
   dep_lists_msg_info("LIB: ${_FDP_LIB}")
   dep_lists_msg_info("OPTIONAL: ${dep_lists_append_OPTIONAL}")
   dep_lists_msg_info("PRIVATE: ${dep_lists_append_PRIVATE}")
+  dep_lists_msg_info("TARGET: ${dep_lists_append_TARGET}")
   
   if (dep_lists_append_PRIVATE)
     set(_FDP_PREFIX ${_FDP_PREFIX}_PRIVATE)
@@ -494,6 +519,12 @@ macro(dep_lists_append _FDP_NAME)
   dep_lists_clean_list(${_FDP_PREFIX}_LINK)
   list(APPEND ${_FDP_PREFIX}_LIB  "${_FDP_LIB}")
   dep_lists_clean_list(${_FDP_PREFIX}_LIB)
+  
+  if (dep_lists_append_TARGET)
+    list(APPEND ${_FDP_PREFIX}_TARGET  "${dep_lists_append_TARGET}")
+    dep_lists_clean_list(${_FDP_PREFIX}_TARGET)
+  endif()
+  
 endmacro(dep_lists_append)
 
 macro(dep_lists_init)
@@ -523,10 +554,10 @@ macro(dep_lists_init)
     endforeach()
   endif()
   
-  string(TOUPPER ${PROJECT_NAME} PNU)
+  string(TOUPPER ${PROJECT_NAME} _PNU)
 endmacro()
 
-# install ${${PNU}_HEADERS} into CMAKE_CURRENT_BINARY_DIR/${PNL}/
+# install ${${_PNU}_HEADERS} into CMAKE_CURRENT_BINARY_DIR/${PNL}/
 # FIXME only works for relative path headers atm!
 function(dep_lists_export_local)
 
@@ -555,7 +586,7 @@ function(dep_lists_export_local)
   set(CMAKECONFIG_PKG_EXPORT_VARS ${${_FDP_PNU}_EXPORT_VARS_VALUES})
   
   
-  set(CMAKECONFIG_PKG_COMPONENTS ${${PNU}_PKG_COMPONENTS})
+  set(CMAKECONFIG_PKG_COMPONENTS ${${_PNU}_PKG_COMPONENTS})
 
   if (dep_lists_append_DIRECT_HEADER_INCLUDE)
     set(CMAKECONFIG_INC "include/${PNL}") #in build dir - headers were already copied above
@@ -563,11 +594,16 @@ function(dep_lists_export_local)
     set(CMAKECONFIG_INC "include") #in build dir - headers were already copied above
   endif()
   
+  foreach(LIB ${${_FDP_PNU}_EXPORT_LIBS})
+    add_dependencies(${LIB} ${PNL}-header-export)
+  endforeach()
+  
   if (WIN32)
     set(CMAKECONFIG_LIB "")
     foreach(LIB ${${_FDP_PNU}_EXPORT_LIBS})
       list(APPEND CMAKECONFIG_LIB optimized ${LIB} debug ${LIB}d)
     endforeach()
+	list(APPEND CMAKECONFIG_LIB ${${_FDP_PNU}_EXTRA_LIBS})
   else()
     set(CMAKECONFIG_LIB ${${_FDP_PNU}_EXPORT_LIBS}) # our libs to link on import
   endif()
