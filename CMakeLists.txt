@@ -52,6 +52,8 @@ target_link_libraries(hdmarker PUBLIC ${${_PNU}_LIB})
 target_link_libraries(hdmarker PRIVATE ${${_PNU}_PRIVATE_LIB})
 list(APPEND ${_PNU}_EXPORT_LIBS hdmarker)
 
+add_dependencies(hdmarker hdmarker-header-export)
+
 #####################################################
 ## INSTALL
 #####################################################
