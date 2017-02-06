@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 #include "hdmarker.hpp"
-#include "timebench.hpp"
+//#include "timebench.hpp"
 #include "subpattern.hpp"
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -207,7 +207,7 @@ void corrupt(Mat &img)
 
 int main(int argc, char* argv[])
 {
-  microbench_init();
+//  microbench_init();
   char buf[64];
   Mat img, paint;
   Point2f p1, p2;
@@ -232,15 +232,15 @@ int main(int argc, char* argv[])
   //imwrite("corrupted.png", img);
   Marker::init();
   
-  microbench_measure_output("app startup");
+//  microbench_measure_output("app startup");
   //CALLGRIND_START_INSTRUMENTATION;
   if (argc == 4)
     Marker::detect(img, corners,use_rgb,0,0,atof(argv[3]),100);
   else
-    Marker::detect(img, corners,use_rgb,0,0,0.5);
+    Marker::detect(img, corners,use_rgb,0,100, 0.5, 3, 0);
   //CALLGRIND_STOP_INSTRUMENTATION;
     
-  microbench_init();
+//  microbench_init();
   
   printf("final score %d corners\n", corners.size());
   
@@ -255,7 +255,7 @@ int main(int argc, char* argv[])
   }
   
   vector<Corner> corners_f;
-  check_calibration(corners, img.size().width, img.size().height, img, corners_f);
+  //check_calibration(corners, img.size().width, img.size().height, img, corners_f);
   //check_precision(corners, img.size().width, img.size().height, img, argv[3]);
   
   Mat gray;
@@ -298,6 +298,6 @@ int main(int argc, char* argv[])
   imwrite(argv[2], paint);
   
 
-  microbench_measure_output("app finish");
+//  microbench_measure_output("app finish");
   return EXIT_SUCCESS;
 }

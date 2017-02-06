@@ -4497,14 +4497,9 @@ void Marker::detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_s
     m->getCorners(c);
     if (!allcorners[m->page])
       allcorners[m->page] = new vector<Marker_Corner>(35*35);
-    if ((*allcorners[m->page])[c[0].coord.y*32+c[0].coord.x].page == -1 || (*allcorners[m->page])[c[0].coord.y*32+c[0].coord.x].score < c[0].score)
-      (*allcorners[m->page])[c[0].coord.y*32+c[0].coord.x] = c[0];
-    if ((*allcorners[m->page])[c[1].coord.y*32+c[1].coord.x].page == -1 || (*allcorners[m->page])[c[1].coord.y*32+c[1].coord.x].score < c[1].score)
-      (*allcorners[m->page])[c[1].coord.y*32+c[1].coord.x] = c[1];
-    if ((*allcorners[m->page])[c[2].coord.y*32+c[2].coord.x].page == -1 || (*allcorners[m->page])[c[2].coord.y*32+c[2].coord.x].score < c[2].score)
-      (*allcorners[m->page])[c[2].coord.y*32+c[2].coord.x] = c[2];
-    if ((*allcorners[m->page])[c[3].coord.y*32+c[3].coord.x].page == -1 || (*allcorners[m->page])[c[3].coord.y*32+c[3].coord.x].score < c[3].score)
-      (*allcorners[m->page])[c[3].coord.y*32+c[3].coord.x] = c[3];
+    for(int l=0;l<4;l++)
+      if ((*allcorners[m->page])[c[l].coord.y*32+c[l].coord.x].page == -1 || (*allcorners[m->page])[c[l].coord.y*32+c[l].coord.x].score < c[l].score)
+        (*allcorners[m->page])[c[l].coord.y*32+c[l].coord.x] = c[l];
   }
   
 #ifdef PAINT_CANDIDATE_CORNERS
@@ -4526,8 +4521,9 @@ void Marker::detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_s
 	if ((*allcorners[j])[i].page != -1 && (*allcorners[j])[i].score > corner_good) {
 	  mc = (*allcorners[j])[i];
           //cannot refine if too close to border :-(
-          if (mc.p.x-mc.size <= 0 || mc.p.x+mc.size >= img.size().width || mc.p.y-mc.size <= 0 || mc.p.y+mc.size >= img.size().height)
+          if (mc.p.x-mc.size/3 <= 0 || mc.p.x+mc.size/3 >= img.size().width || mc.p.y-mc.size/3 <= 0 || mc.p.y+mc.size/3 >= img.size().height) {
             continue;
+          }
 	  //FIXME more accurate refinement+larger region than global options?
 	 //mc.estimated = false;
 	  //FIXME check/verify accuracy!
