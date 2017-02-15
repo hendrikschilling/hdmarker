@@ -4458,7 +4458,7 @@ void Marker::detect(cv::Mat &img, std::vector<Marker> &markers, int marker_size_
     microbench_measure_run("full run");
 }
 
-void Marker::detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_size_max, int marker_size_min, float effort, int mincount, int inpage)
+void detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_size_max, int marker_size_min, float effort, int mincount, int inpage)
 {
   Marker_Corner c[4];
   Marker_Corner mc;
@@ -4490,7 +4490,7 @@ void Marker::detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_s
   else
     use_rgb = false;
   
-  detect(img, markers, marker_size_max, marker_size_min, effort, mincount, &scales, &scales_border, inpage);
+  Marker::detect(img, markers, marker_size_max, marker_size_min, effort, mincount, &scales, &scales_border, inpage);
   
   for(uint i=0;i<markers.size();i++) {
     m = &markers[i];

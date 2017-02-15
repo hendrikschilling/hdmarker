@@ -235,9 +235,9 @@ int main(int argc, char* argv[])
 //  microbench_measure_output("app startup");
   //CALLGRIND_START_INSTRUMENTATION;
   if (argc == 4)
-    Marker::detect(img, corners,use_rgb,0,0,atof(argv[3]),100);
+    detect(img, corners,use_rgb,0,0,atof(argv[3]),100);
   else
-    Marker::detect(img, corners,use_rgb,0,100, 0.5, 3, 0);
+    detect(img, corners,use_rgb,0,100, 0.5, 3, 0);
   //CALLGRIND_STOP_INSTRUMENTATION;
     
 //  microbench_init();
