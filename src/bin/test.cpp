@@ -244,7 +244,7 @@ int main(int argc, char* argv[])
   
   printf("final score %d corners\n", corners.size());
   
-  for(uint32_t i=0;i<corners.size();i++) {
+  for(int i=0;i<corners.size();i++) {
     c = corners[i];
     //if (c.page != 256) continue;
     sprintf(buf, "%d/%d", c.id.x, c.id.y);
