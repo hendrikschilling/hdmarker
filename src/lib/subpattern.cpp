@@ -1542,17 +1542,17 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   }
 }
 
-void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size, Mat *paint, bool *mask_2x2, int page, const Rect &limit, int flags)
+void refine_recursive(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size, Mat *paint, bool *mask_2x2, int page, const Rect &limit, int flags)
 {
   std::vector<Rect> limits;
   
   if (limit.width && limit.height)
     limits.push_back(limit);
   
-  hdmarker_detect_subpattern(img, corners, corners_out, depth, size, paint, mask_2x2, page, limits, flags);
+  refine_recursive(img, corners, corners_out, depth, size, paint, mask_2x2, page, limits, flags);
 }
 
-void hdmarker_detect_subpattern(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size, Mat *paint, bool *mask_2x2, int page, const std::vector<Rect> &limits, int flags)
+void refine_recursive(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size, Mat *paint, bool *mask_2x2, int page, const std::vector<Rect> &limits, int flags)
 {
   int keep;
   bool checkrange = true;

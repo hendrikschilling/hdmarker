@@ -290,7 +290,7 @@ int main(int argc, char* argv[])
   
   vector<Corner> corners_sub; 
   double msize = 1.0;
-  hdmarker_detect_subpattern(gray, corners_f, corners_sub, 3, &msize);
+  refine_recursive(gray, corners_f, corners_sub, 3, &msize);
   
   vector<Corner> corners_f2;
   check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f2);
