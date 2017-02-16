@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.6)
 project(hdmarker-buildtest)
 
-list(APPEND CMAKE_CXX_FLAGS "-std=c++11 -Wall")
+list(APPEND CMAKE_CXX_FLAGS "-std=c++11 -Wall -fopenmp")
 
 find_package(hdmarker REQUIRED)
 
