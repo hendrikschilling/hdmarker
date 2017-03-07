@@ -5,7 +5,11 @@ Detection
 
 # Overview {#det_over}
 
-The HDMarker calibration pattern consists of two (relatively) independent parts, the robust, self identifiying calibration pattern, and the dense fractal calibration points.
+The HDMarker calibration pattern consists of two (relatively) independent parts, the robust, self identifiying calibration pattern, and the dense fractal calibration points. 
+
+# Bitdepth
+
+Note that all methods in this library assume 8 bit images. For higher bitdepths, rescale them to 8 bit, using acutal image min/max values.
 
 # Detection {#det_det}
 
