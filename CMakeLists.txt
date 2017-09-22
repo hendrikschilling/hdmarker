@@ -39,14 +39,19 @@ dep_lists_append(Ceres)
 
 
 dep_lists_pkg_search()
-set(${_PNU}_HEADERS src/lib/hdmarker.hpp src/lib/subpattern.hpp src/lib/gridstore.hpp)
+file(GLOB CONF_INCLUDE_DIRS "src/lib/hdmarker.hpp" "src/lib/subpattern.hpp" "src/lib/gridstore.hpp")
+set(${_PNU}_HEADERS ${CONF_INCLUDE_DIRS})
 dep_lists_prepare_env()
 
-message("hdmnarker should use oipencv inc: ${OpenCV_INCLUDE_DIRS}")
+message("hdmarker should use opencv inc: ${OpenCV_INCLUDE_DIRS}")
 
 #####################################################
 ## COMPILE
 #####################################################
+if (BUILD_SHARED_LIBS)
+  add_definitions(-D${BUILD_SHARED_LIBS})
+endif()
+
 add_library(hdmarker src/lib/hdmarker.cpp src/lib/gridstore.cpp src/lib/timebench.cpp src/lib/subpattern.cpp)
 target_link_libraries(hdmarker PUBLIC ${${_PNU}_LIB})
 target_link_libraries(hdmarker PRIVATE ${${_PNU}_PRIVATE_LIB})
@@ -56,6 +61,12 @@ add_executable(hdmarker_test src/bin/test.cpp)
 target_link_libraries(hdmarker_test hdmarker)
 
 add_dependencies(hdmarker hdmarker-header-export)
+
+
+export(TARGETS ${CMAKE_PROJECT_NAME} FILE ${hdmarker_BINARY_DIR}/hdmarkerTargets.cmake)
+export(PACKAGE ${CMAKE_PROJECT_NAME})
+
+include(cmake/GenConfig.cmake)
 
 #####################################################
 ## INSTALL
