@@ -5,8 +5,19 @@ project(hdmarker)
 #####################################################
 ## INIT
 #####################################################
-include(external/flexdeplists/FlexDepLists.cmake)
-dep_lists_init()
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/flexdeplists")
+message("CMAKE_MODULE_PATH: " ${CMAKE_MODULE_PATH})
+#set(VAD_VERBOSE TRUE)
+# TODO integrate
+include(VAD_Wrappers)
+# TODO integrate into VAD framework
+include(VigraAddDep)
+
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+include(CMakeParseArguments)
 
 #####################################################
 ## ENVIRONMENT
@@ -31,40 +42,29 @@ if (NOT DEFINED BUILD_SHARED_LIBS)
 endif()
 
 #####################################################
-## DEPENDENCIES
-#####################################################
-#metamat
-dep_lists_append(OpenCV OpenCV_INCLUDE_DIRS "" OpenCV_LIBS)
-dep_lists_append(Ceres)
-
-
-dep_lists_pkg_search()
-file(GLOB CONF_INCLUDE_DIRS "src/lib/hdmarker.hpp" "src/lib/subpattern.hpp" "src/lib/gridstore.hpp")
-set(${_PNU}_HEADERS ${CONF_INCLUDE_DIRS})
-dep_lists_prepare_env()
-
-message("hdmarker should use opencv inc: ${OpenCV_INCLUDE_DIRS}")
-
-#####################################################
 ## COMPILE
 #####################################################
 if (BUILD_SHARED_LIBS)
   add_definitions(-D${BUILD_SHARED_LIBS})
 endif()
 
+include_directories(src/lib/)
+
 add_library(hdmarker src/lib/hdmarker.cpp src/lib/gridstore.cpp src/lib/timebench.cpp src/lib/subpattern.cpp)
+vad_link(hdmarker ceres opencv_core opencv_imgproc opencv_highgui opencv_imgcodecs opencv_calib3d)
+vad_headers(hdmarker src/lib/hdmarker.hpp src/lib/gridstore.hpp src/lib/subpattern.hpp)
 target_link_libraries(hdmarker PUBLIC ${${_PNU}_LIB})
 target_link_libraries(hdmarker PRIVATE ${${_PNU}_PRIVATE_LIB})
-list(APPEND ${_PNU}_EXPORT_LIBS hdmarker)
+#list(APPEND ${_PNU}_EXPORT_LIBS hdmarker)
 
 add_executable(hdmarker_test src/bin/test.cpp)
 target_link_libraries(hdmarker_test hdmarker)
 
 add_dependencies(hdmarker hdmarker-header-export)
 
-
+set(CONF_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/include)
 export(TARGETS ${CMAKE_PROJECT_NAME} FILE ${hdmarker_BINARY_DIR}/hdmarkerTargets.cmake)
-export(PACKAGE ${CMAKE_PROJECT_NAME})
+#export(PACKAGE ${CMAKE_PROJECT_NAME})
 
 include(cmake/GenConfig.cmake)
 
