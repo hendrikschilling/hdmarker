@@ -58,8 +58,9 @@ vad_headers(hdmarker src/lib/hdmarker.hpp src/lib/gridstore.hpp src/lib/subpatte
 
 add_executable(hdmarker_test src/bin/test.cpp)
 target_link_libraries(hdmarker_test hdmarker)
-
+set(HDMARKER_LIBRARY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${CMAKE_SHARED_LIBRARY_PREFIX}hdmarker${CMAKE_SHARED_LIBRARY_SUFFIX} CACHE INTERNAL "" FORCE)
 add_dependencies(hdmarker hdmarker-header-export)
+
 
 set(CONF_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/include)
 #target_include_directories(ucalib INTERFACE)
