@@ -69,6 +69,8 @@ export(TARGETS hdmarker FILE ${hdmarker_BINARY_DIR}/hdmarkerTargets.cmake)
 
 include(cmake/GenConfig.cmake)
 
+vad_auto_deps_show()
+
 #####################################################
 ## INSTALL
 #####################################################
