@@ -55,6 +55,9 @@ list(APPEND ${_PNU}_EXPORT_LIBS hdmarker)
 add_executable(hdmarker_test src/bin/test.cpp)
 target_link_libraries(hdmarker_test hdmarker)
 
+add_executable(marker_gen src/bin/marker_gen.cpp)
+target_link_libraries(marker_gen hdmarker)
+
 add_dependencies(hdmarker hdmarker-header-export)
 
 #####################################################
