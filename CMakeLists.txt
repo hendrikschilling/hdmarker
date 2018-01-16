@@ -88,6 +88,12 @@ vad_auto_deps_show()
 add_subdirectory(demo/)
 
 
+#####################################################
+## when install then also install pkgconfig
+#####################################################
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/hdmarker.pc.in ${CMAKE_CURRENT_BINARY_DIR}/hdmarker.pc @ONLY)
+message("Path: " ${CMAKE_INSTALL_DATAROOTDIR})
+install(FILES ${CMAKE_BINARY_DIR}/hdmarker.pc DESTINATION "${CMAKE_INSTALL_PREFIX}/share/pkgconfig")
 
 
 
