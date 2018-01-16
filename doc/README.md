@@ -15,7 +15,7 @@ or<br>
 <br>
 <br>
 
-## How to cut the target to the desired shape
 ## How to cut the target to the desired shape {#cut_target}
+## How to cut the target to the desired shape 
 
 When cutting the target to the desired shape you can use the png version of the target. Afterwards, please vectorize the image before printing the target, i.e., convert the image to pdf. Otherwise the resulting image is blurred. Thus please use inkscape, import the png image and goto: Path->Trace Bitmap. Disable all optimizations like edge smoothing. Then press OK. Finally delete the imported image and save the traced result as pdf.

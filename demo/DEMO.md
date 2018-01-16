@@ -1,4 +1,4 @@
-Demo marker detection
+Demo marker detection {#demo_usage}
 ================
 
 The following demo provides an c++ code example about how to extract marker information from an given input image.
