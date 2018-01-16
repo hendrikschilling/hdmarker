@@ -1,15 +1,14 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(hdmarker)
 
+
 #####################################################
-## INIT
+## INITITIALIZE CMAKE ENVIRONMENT
 #####################################################
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/flexdeplists")
 message("CMAKE_MODULE_PATH: " ${CMAKE_MODULE_PATH})
-#set(VAD_VERBOSE TRUE)
-# TODO integrate
+
 include(VAD_Wrappers)
-# TODO integrate into VAD framework
 include(VigraAddDep)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -18,8 +17,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 include(CMakeParseArguments)
 
+
 #####################################################
-## ENVIRONMENT
+## SET COMPILER ENVIRONMENT
 #####################################################
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
   add_definitions(-DCOMPILER_CLANG_X86)
@@ -40,6 +40,23 @@ if (NOT DEFINED BUILD_SHARED_LIBS)
   endif()
 endif()
 
+
+
+#####################################################
+## DEFINE make doc
+#####################################################
+find_package(Doxygen REQUIRED)
+if(DOXYGEN_FOUND)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/doc/doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY IMMEDIATE)
+    add_custom_target(doc ALL COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
+        SOURCES ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Generating API documentation with Doxygen" VERBATIM
+        )
+endif()
+
+
+
 #####################################################
 ## COMPILE
 #####################################################
@@ -52,12 +69,6 @@ include_directories(src/lib/)
 add_library(hdmarker src/lib/hdmarker.cpp src/lib/gridstore.cpp src/lib/timebench.cpp src/lib/subpattern.cpp)
 vad_link(hdmarker ceres opencv_core opencv_imgproc opencv_highgui opencv_imgcodecs opencv_calib3d)
 vad_headers(hdmarker src/lib/hdmarker.hpp src/lib/gridstore.hpp src/lib/subpattern.hpp)
-#target_link_libraries(hdmarker PUBLIC ${${_PNU}_LIB})
-#target_link_libraries(hdmarker PRIVATE ${${_PNU}_PRIVATE_LIB})
-#list(APPEND ${_PNU}_EXPORT_LIBS hdmarker)
-
-add_executable(hdmarker_test src/bin/test.cpp)
-target_link_libraries(hdmarker_test hdmarker)
 
 set(HDMARKER_LIBRARY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${CMAKE_SHARED_LIBRARY_PREFIX}hdmarker${CMAKE_SHARED_LIBRARY_SUFFIX} CACHE INTERNAL "" FORCE)
 
@@ -65,18 +76,19 @@ add_executable(marker_gen src/bin/marker_gen.cpp)
 target_link_libraries(marker_gen hdmarker)
 
 add_dependencies(hdmarker hdmarker-header-export)
-
-
 set(CONF_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/include)
-#target_include_directories(ucalib INTERFACE)
 export(TARGETS hdmarker FILE ${hdmarker_BINARY_DIR}/hdmarkerTargets.cmake)
-#export(PACKAGE hdmarker)
-
 include(cmake/GenConfig.cmake)
 
 vad_auto_deps_show()
 
 #####################################################
-## INSTALL
+## COMPILE DEMO
 #####################################################
-#dep_lists_export_local()
+add_subdirectory(demo/)
+
+
+
+
+
+
