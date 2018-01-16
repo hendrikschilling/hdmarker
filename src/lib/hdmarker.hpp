@@ -1,6 +1,15 @@
 #ifndef __LIBHDMARKER_H
 #define __LIBHDMARKER_H
 
+/** 
+* @file hdmarker.hpp 
+* @brief Header of hdmarker class
+*
+* @author Hendrik Schilling (implementation)
+* @author Maximilian Diebold (documentation)
+* @date 01/15/2018
+*/
+
 #include <vector>
 #include <opencv2/core/core.hpp>
 
@@ -8,6 +17,16 @@
 
 namespace hdmarker {
 
+    
+    
+    
+/**
+* @class Marker_Corner
+*
+* @brief Used internally in markers class to detect marker corners
+*
+* TODO
+*/    
 class Marker_Corner {
 public :
   cv::Point2f p, dir[2], pc[3];
@@ -47,6 +66,15 @@ public :
                       cv::Size win, cv::Size zeroZone, cv::TermCriteria criteria);
 };
 
+
+
+/**
+* @class Corner
+*
+* @brief contain the intersection points of the checkerboard and the fractal marker points, this information is used for the calibration in ucalib
+*
+* TODO
+*/ 
 class Corner {
 public :
   cv::Point2f p, pc[3];
@@ -97,6 +125,16 @@ public :
   void paint_text(cv::Mat &paint);
 };
 
+
+
+
+/**
+* @class Marker
+*
+* @brief used to detect the coded markers and the checkerboard intersection corners
+*
+* TODO
+*/ 
 class Marker {
   private:
   public:
@@ -134,7 +172,15 @@ class Marker {
     static void detect_minscale(cv::Mat &img, cv::Mat &paint, std::vector<Corner> &corners, int scale_min = 8);
 };
 
-void detect(cv::Mat img, std::vector<Corner> &corners, bool use_rgb = false, int marker_size_max = 0, int marker_size_min = 5, float effort = 0.5, int mincount = 5, int inpage = -1);
+
+void detect(cv::Mat img, 
+            std::vector<Corner> &corners, 
+            bool use_rgb = false, 
+            int marker_size_max = 0, 
+            int marker_size_min = 5, 
+            float effort = 0.5, 
+            int mincount = 5, 
+            int inpage = -1);
 
 }
 

@@ -13,7 +13,7 @@
 using namespace cv;
 using namespace std;
 
-const int recursive_markers = 3;
+int recursive_markers = 3;
 const int subsampling = 1;
 const int ss_border = 2;
 
@@ -110,17 +110,18 @@ int main(int argc, char* argv[])
 {
   int page = atoi(argv[1]); 
   
-  if (argc == 3) {
+  if (argc == 4) {
     Mat img = Mat::zeros(16*10, 32*5, CV_8UC1);
     img += 255;
     writemarker(img, page);
     //resize(img, img, Size(16*10*8, 16*10*8), 0, 0, INTER_NEAREST);
+    recursive_markers = atoi(argv[2]);
     checker_add_recursive(img, img);
-    imwrite(argv[2], img);
+    imwrite(argv[3], img);
   }
-  else if (argc == 5) {
-    int w = atoi(argv[2]);
-    int h = atoi(argv[3]);
+  else if (argc == 6) {
+    int w = atoi(argv[3]);
+    int h = atoi(argv[4]);
     assert(w && h);
     Mat img = Mat::zeros(h*32*5, w*32*5, CV_8UC1);
     img += 255;
@@ -129,8 +130,9 @@ int main(int argc, char* argv[])
       for(int i=0;i<w;i++)
 	writemarker(img, page+j*w+i, 32*5*i, 32*5*j);
     //resize(img, img, Size(w*32*5*1, h*32*5*1), 0, 0, INTER_NEAREST); 
+    recursive_markers = atoi(argv[2]);
     checker_add_recursive(img, img);
-    imwrite(argv[4], img);
+    imwrite(argv[5], img);
   }
 
   

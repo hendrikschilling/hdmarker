@@ -1,6 +1,15 @@
 #ifndef _LUTCALIB_LOESS_H
 #define _LUTCALIB_LOESS_H
 
+/** 
+* @file loess.h 
+* @brief intrinsics definitions
+*
+* @author Hendrik Schilling (implementation)
+* @author Maximilian Diebold (documentation)
+* @date 01/15/2018
+*/
+
 #include "settings.hpp"
 
 #include "ceres/ceres.h"

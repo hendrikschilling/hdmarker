@@ -12,6 +12,7 @@ Gridstore::Gridstore()
   d = -1;
 }
 
+
 Gridstore::Gridstore(int wi, int hi, int di)
 {
   d = di;
@@ -36,12 +37,16 @@ void Gridstore::add(void *data, Point2f p)
   elements.push_back(data);
 }
 
+/**
+ *  Destructor
+ */
 Gridstore::~Gridstore()
 {
   for(int i=0;i<w*h;i++)
     if (buckets[i])
       delete buckets[i];
 }
+
 
 vector<void*> Gridstore::getWithin(Point2f p, int dist)
 {
@@ -63,9 +68,11 @@ vector<void*> Gridstore::getWithin(Point2f p, int dist)
 }
 
 
+
 int Gridstore::size(){
   return elements.size();
 }
+
 
 void * Gridstore::operator[](int i)
 {

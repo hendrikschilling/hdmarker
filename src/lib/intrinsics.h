@@ -1,5 +1,15 @@
 #ifdef COMPILER_GCC_X86
 
+/** 
+* @file intrinsics.h 
+* @brief intrinsics definitions
+*
+* @author Hendrik Schilling
+* @editor Maximilian Diebold
+* @date 01/15/2018
+*/
+
+
 #define pand      __builtin_ia32_pand128
 #define psubb     __builtin_ia32_psubb128
 #define pxor      __builtin_ia32_pxor128
