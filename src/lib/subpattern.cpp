@@ -112,7 +112,7 @@ public:
   void add(Point2i idx, Point2f pos)
   {
     if (!CheckRad(pos, 2, idx))
-      abort();
+      throw runaway_subpattern("points too close on add!");
     
     points[((int)pos.y)*_w+(int)(pos.x)] = std::pair<Point2i,Point2f>(idx,pos);
   }
@@ -969,7 +969,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
         {
           if (!points.CheckRad(refine_p, 2, extr_id)) {
             imwrite("fitted.tif", *paint);
-            abort();
+            throw runaway_subpattern("point too close!");
           }
         }
         
@@ -1022,7 +1022,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
             added++;
             if (!points.CheckRad(refine_p, 2, extr_id)) {
               imwrite("fitted.tif", *paint);
-              abort();
+              throw runaway_subpattern("point too close!");
             }
             points.add(extr_id, Point2i(c_i.p.x+0.5, c_i.p.y+0.5));
             corners_out_map[id_to_key(extr_id)] = c_i;
@@ -1166,8 +1166,10 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
           continue;
         
         Mat pers = findHomography(local_ids, local_points);
-        if (pers.empty())
-          abort();
+        if (pers.empty()) {
+          printf("TODO: shouldn't we find a transform here?");
+          continue;
+        }
         
         Matx31f projected = Matx33f(pers)*Matx31f(extr_id.x, extr_id.y, 1);
         Matx33f p_xm(pers);
@@ -1207,7 +1209,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         {
           if (!points.CheckRad(refine_p, 1, extr_id)) {
             imwrite("fitted.tif", *paint);
-            abort();
+            throw runaway_subpattern("point too close!");
           }
         }
         
@@ -1277,7 +1279,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
             added++;
             if (!points.CheckRad(refine_p, 2, extr_id)) {
               imwrite("fitted.tif", *paint);
-              abort();
+              throw runaway_subpattern("point too close!");
             }
             points.add(extr_id, Point2i(c_i.p.x+0.5, c_i.p.y+0.5));
             corners_out_map[id_to_key(extr_id)] = c_i;

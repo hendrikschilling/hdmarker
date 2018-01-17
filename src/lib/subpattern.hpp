@@ -5,7 +5,16 @@
 
 #include "hdmarker.hpp"
 
+#include <exception>
+
 namespace hdmarker {
+  
+class runaway_subpattern : public std::exception
+{
+public:
+  std::string err;
+  runaway_subpattern(std::string err) : err(err) {};
+};
   
 enum flag {KEEP_ALL_LEVELS = 1, KEEP_ALL_RECURSIVE_LEVELS = 2};
 
