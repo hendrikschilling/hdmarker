@@ -1,5 +1,13 @@
-#include <stdio.h>
+/** 
+* @file demo.cpp 
+* @brief demo application of hdmarker
+*
+* @author Hendrik Schilling (implementation)
+* @author Maximilian Diebold (documentation)
+* @date 01/15/2018
+*/
 
+#include <stdio.h>
 #include "hdmarker.hpp"
 //#include "timebench.hpp"
 #include "subpattern.hpp"
@@ -19,7 +27,7 @@ const int grid_height = 1;
 
 const bool use_rgb = false;
 
-const bool demosaic = true;
+const bool demosaic = false;
 
 void usage(const char *c)
 {
@@ -205,6 +213,25 @@ void corrupt(Mat &img)
   cvtColor(img, img, CV_BGR2GRAY);
 }
 
+
+
+/**
+ * ## HDmarker demo {#Demo_hdmarker}
+ * 
+ * @name    Example API Actions 
+ * @brief   Example of how to use the marker extraction.
+ *
+ * This API provides certain actions as an example of the usage.
+ *
+ * @param [in] calibration_image  Provides image of marker.
+ * @param [in] result_image  Contains detected markers.
+ *
+ *
+ * Example Usage:
+ * @code
+ *    extractMarker extractDemo.png Result.png; // Extracts marker with refinement and saves an image of all found markers
+ * @endcode
+ */
 int main(int argc, char* argv[])
 {
 //  microbench_init();
@@ -233,11 +260,12 @@ int main(int argc, char* argv[])
   Marker::init();
   
 //  microbench_measure_output("app startup");
+
   //CALLGRIND_START_INSTRUMENTATION;
   if (argc == 4)
     detect(img, corners,use_rgb,0,0,atof(argv[3]),100);
   else
-    detect(img, corners,use_rgb,0,100, 0.5, 3, 0);
+    detect(img, corners,use_rgb,0,10, 0.5, 3);
   //CALLGRIND_STOP_INSTRUMENTATION;
     
 //  microbench_init();
@@ -254,49 +282,21 @@ int main(int argc, char* argv[])
     putText(paint, buf, c.p, FONT_HERSHEY_PLAIN, 0.5, Scalar(255,255,255,0), 1, CV_AA);
   }
   
-  vector<Corner> corners_f;
-  //check_calibration(corners, img.size().width, img.size().height, img, corners_f);
-  //check_precision(corners, img.size().width, img.size().height, img, argv[3]);
-  
+//   
   Mat gray;
   if (img.channels() != 1)
     cvtColor(img, gray, CV_BGR2GRAY);
   else
     gray = img;
   
-  /*vector<Corner> corners_sub; 
-  detect_sub_corners(gray , corners_f, corners_sub, 1, 0.0, 10, 1);
-  
-  vector<Corner> corners_f2;
-  check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f2);
-  
-  vector<Corner> corners_sub2; 
-  detect_sub_corners(gray , corners_f2, corners_sub2, 2, 0.5, 5, 0);
-  
-  vector<Corner> corners_f3;
-  check_calibration(corners_sub2, img.size().width, img.size().height, img, corners_f3);
-  
-  vector<Corner> corners_sub3; 
-  detect_sub_corners(gray , corners_f3, corners_sub3, 2, 0.5, 5, 0);
-  
-  vector<Corner> corners_f4;
-  check_calibration(corners_sub3, img.size().width, img.size().height, img, corners_f4);*/
-  
-  /*Mat blur;
-  GaussianBlur(gray, blur, Size(0, 0), 1.5);
-  addWeighted(gray, 3.0, blur, -2.0, 0, gray);
-  
-  imwrite("sharpened.tif", gray);*/
-  
   vector<Corner> corners_sub; 
   double msize = 1.0;
-  refine_recursive(gray, corners_f, corners_sub, 3, &msize);
+  refine_recursive(gray, corners, corners_sub, 3, &msize);
   
   vector<Corner> corners_f2;
   check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f2);
   
   imwrite(argv[2], paint);
-  
 
 //  microbench_measure_output("app finish");
   return EXIT_SUCCESS;

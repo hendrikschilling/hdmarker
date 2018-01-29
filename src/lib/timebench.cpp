@@ -80,8 +80,5 @@ void microbench_measure_run(char *msg)
 #endif
 }
 
-void microbench_measure_stow(void);
-void microbench_output_stowed(char *msg);
-
 } //namespace hdmarker
 

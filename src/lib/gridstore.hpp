@@ -1,9 +1,26 @@
 #ifndef __GIRDSTORE_H
 #define __GIRDSTORE_H
 
+/** 
+* @file gridstore.hpp 
+* @brief Header of Gridstore class
+*
+* @author Hendrik Schilling (implementation)
+* @author Maximilian Diebold (documentation)
+* @date 01/15/2018
+*/
+
 #include <vector>
 #include <opencv2/core/core.hpp>
   
+  
+/**
+* @class Gridstore
+*
+* @brief Internal lookup table to find connected markers faster
+*
+* TODO
+*/  
 class Gridstore {
   int w, h, d;
   std::vector<void*> elements;

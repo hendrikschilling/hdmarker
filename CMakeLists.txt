@@ -3,13 +3,23 @@ project(hdmarker)
 
 
 #####################################################
-## INIT
+## INITITIALIZE CMAKE ENVIRONMENT
 #####################################################
-include(external/flexdeplists/FlexDepLists.cmake)
-dep_lists_init()
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/flexdeplists")
+message("CMAKE_MODULE_PATH: " ${CMAKE_MODULE_PATH})
+
+include(VAD_Wrappers)
+include(VigraAddDep)
+
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+include(CMakeParseArguments)
+
 
 #####################################################
-## ENVIRONMENT
+## SET COMPILER ENVIRONMENT
 #####################################################
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
   add_definitions(-DCOMPILER_CLANG_X86)
@@ -30,37 +40,61 @@ if (NOT DEFINED BUILD_SHARED_LIBS)
   endif()
 endif()
 
+
+
 #####################################################
-## DEPENDENCIES
+## DEFINE make doc
 #####################################################
-#metamat
-dep_lists_append(OpenCV OpenCV_INCLUDE_DIRS "" OpenCV_LIBS)
-dep_lists_append(Ceres)
+find_package(Doxygen REQUIRED)
+if(DOXYGEN_FOUND)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/doc/doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY IMMEDIATE)
+    add_custom_target(doc ALL COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
+        SOURCES ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Generating API documentation with Doxygen" VERBATIM
+        )
+endif()
 
 
-dep_lists_pkg_search()
-set(${_PNU}_HEADERS src/lib/hdmarker.hpp src/lib/subpattern.hpp src/lib/gridstore.hpp)
-dep_lists_prepare_env()
-
-message("hdmnarker should use oipencv inc: ${OpenCV_INCLUDE_DIRS}")
 
 #####################################################
 ## COMPILE
 #####################################################
-add_library(hdmarker src/lib/hdmarker.cpp src/lib/gridstore.cpp src/lib/timebench.cpp src/lib/subpattern.cpp)
-target_link_libraries(hdmarker PUBLIC ${${_PNU}_LIB})
-target_link_libraries(hdmarker PRIVATE ${${_PNU}_PRIVATE_LIB})
-list(APPEND ${_PNU}_EXPORT_LIBS hdmarker)
+if (BUILD_SHARED_LIBS)
+  add_definitions(-D${BUILD_SHARED_LIBS})
+endif()
 
-add_executable(hdmarker_test src/bin/test.cpp)
-target_link_libraries(hdmarker_test hdmarker)
+include_directories(src/lib/)
+
+add_library(hdmarker src/lib/hdmarker.cpp src/lib/gridstore.cpp src/lib/timebench.cpp src/lib/subpattern.cpp)
+vad_link(hdmarker ceres opencv_core opencv_imgproc opencv_highgui opencv_imgcodecs opencv_calib3d)
+vad_headers(hdmarker src/lib/hdmarker.hpp src/lib/gridstore.hpp src/lib/subpattern.hpp)
+
+set(HDMARKER_LIBRARY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${CMAKE_SHARED_LIBRARY_PREFIX}hdmarker${CMAKE_SHARED_LIBRARY_SUFFIX} CACHE INTERNAL "" FORCE)
 
 add_executable(marker_gen src/bin/marker_gen.cpp)
 target_link_libraries(marker_gen hdmarker)
 
 add_dependencies(hdmarker hdmarker-header-export)
+set(CONF_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/include)
+export(TARGETS hdmarker FILE ${hdmarker_BINARY_DIR}/hdmarkerTargets.cmake)
+include(cmake/GenConfig.cmake)
+
+vad_auto_deps_show()
 
 #####################################################
-## INSTALL
+## COMPILE DEMO
 #####################################################
-#dep_lists_export_local()
+add_subdirectory(demo/)
+
+
+#####################################################
+## when install then also install pkgconfig
+#####################################################
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/hdmarker.pc.in ${CMAKE_CURRENT_BINARY_DIR}/hdmarker.pc @ONLY)
+message("Path: " ${CMAKE_INSTALL_DATAROOTDIR})
+install(FILES ${CMAKE_BINARY_DIR}/hdmarker.pc DESTINATION "${CMAKE_INSTALL_PREFIX}/share/pkgconfig")
+
+
+
+

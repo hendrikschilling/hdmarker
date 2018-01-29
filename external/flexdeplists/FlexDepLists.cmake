@@ -293,22 +293,12 @@ endmacro(dep_lists_opt_get)
 
 macro(dep_lists_prepare_env)
   
-  message("hdmarker prepare env:")
-  
-  if (ARGV0)
-    set(_FDP_PNU ${ARGV0})
-    if (${ARGC} EQUAL 0)
-      message("WTF CMAKE ARE YOU KIDDING ME: _FDP_PNU: ARGV0 -> ${_FDP_PNU} (count ${ARGC}}")
-      string(TOUPPER ${PROJECT_NAME} _FDP_PNU)
-    endif()
-  else()
-    string(TOUPPER ${PROJECT_NAME} _FDP_PNU)
-  endif()
+  string(TOUPPER ${PROJECT_NAME} _FDP_PNU)
 
   #####################################################
   ## SET INCLUDES, LIBS, ... (public)
   #####################################################
-  message("inc var name list: ${_FDP_PNU}_PKG_INC ${${_FDP_PNU}_PKG_INC}")
+  message("inc var name list (cliini?!): ${_FDP_PNU}_PKG_INC ${${_FDP_PNU}_PKG_INC}")
   
   foreach(INCLUDE ${${_FDP_PNU}_PKG_INC})
     if (${INCLUDE} AND NOT ("${${INCLUDE}}" MATCHES ".*-NOTFOUND"))
