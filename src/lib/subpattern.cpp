@@ -109,12 +109,14 @@ public:
     return true;
   }
   
-  void add(Point2i idx, Point2f pos)
+  bool add(Point2i idx, Point2f pos)
   {
     if (!CheckRad(pos, 2, idx))
-      throw runaway_subpattern("points too close on add!");
+      return true;
     
     points[((int)pos.y)*_w+(int)(pos.x)] = std::pair<Point2i,Point2f>(idx,pos);
+    
+    return false;
   }
   
   std::pair<Point2i,Point2f> *points;
@@ -881,6 +883,9 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
   int checked = 0;
   int skipped = 0;
   
+  bool failed = false;
+  std::string fail_cause;
+  
   IntCMap corners_map;
   IntCMap corners_out_map;
   
@@ -893,7 +898,11 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
   int done = 0;
   
 #pragma omp parallel for schedule(guided, 1)
-  for(int i=0;i<corners.size();i++) {
+  for(int i=0;i<corners.size();i++)
+  {
+    if (failed)
+      continue;
+    
     Corner c;
     
     c = corners[i];
@@ -969,9 +978,11 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
         {
           if (!points.CheckRad(refine_p, 2, extr_id)) {
             imwrite("fitted.tif", *paint);
-            throw runaway_subpattern("point too close!");
+            failed = true;
+            fail_cause = "point too close!";
           }
         }
+        if (failed) continue;
         
         if (!p_area_in_img_border(img, refine_p, maxlen*0.2)
           || is_diff_larger(maxlen*0.2, c.size, max_size_diff)) {
@@ -1022,14 +1033,21 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
             added++;
             if (!points.CheckRad(refine_p, 2, extr_id)) {
               imwrite("fitted.tif", *paint);
-              throw runaway_subpattern("point too close!");
+              failed =true;
+              fail_cause = "point too close!";
             }
-            points.add(extr_id, Point2i(c_i.p.x+0.5, c_i.p.y+0.5));
-            corners_out_map[id_to_key(extr_id)] = c_i;
+            if (!failed) {
+              if (points.add(extr_id, Point2i(c_i.p.x+0.5, c_i.p.y+0.5))) {
+                failed =true;
+                fail_cause = "point too close!";
+              }
+              corners_out_map[id_to_key(extr_id)] = c_i;
+            }
             //FIXME add same corner multiple times if found from different direction?
             //corners_out.push_back(c_o);
           }
         }
+        if (failed) continue;
         //else
         //count multiply found processed points?
       }
@@ -1037,6 +1055,10 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
       if (done % ((corners.size()/100)+1) == 0)
 #pragma omp critical(__print__)
         printprogress(done, corners.size(), counter, " %d corners, range %d, added %d checked %d skipped %d", corners.size(), int_extend_range, added, checked, skipped);
+  }
+  
+  if (failed) {
+    throw runaway_subpattern(fail_cause);
   }
   
   //FIXME push all corners from corners_out_map
@@ -1075,6 +1097,8 @@ float size_from_pers(const Matx33f &p, int idx_step, const Point2i &extr_id)
 
 int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corners, vector<Corner> &corners_out, IntCMap &blacklist_rec, IntCLMap &blacklist, int idx_step, int int_extend_range, SimpleCloud2d &points, Mat *paint = NULL, bool *mask_2x2 = NULL, bool checkrange = false, const std::vector<Rect> &limits = std::vector<Rect>(), int mul = 0)
 {
+  bool failed = false;
+  std::string fail_cause;
   int counter = 0;
   int added = 0;
   int checked = 0;
@@ -1092,7 +1116,11 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
   int done = 0;
   
 #pragma omp parallel for schedule(guided, 1)
-  for(int i=0;i<corners.size();i++) {
+  for(int i=0;i<corners.size();i++)
+  {
+    if (failed)
+      continue;
+    
     Corner c;
     
     c = corners[i];
@@ -1209,9 +1237,12 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         {
           if (!points.CheckRad(refine_p, 1, extr_id)) {
             imwrite("fitted.tif", *paint);
-            throw runaway_subpattern("point too close!");
+            failed =true;
+            fail_cause = "point too close!";
           }
         }
+        if (failed)
+          continue;
         
         if (!p_area_in_img_border(img, refine_p, size)
           /*|| is_diff_larger(size, c.size, max_size_diff)*/) {
@@ -1279,14 +1310,22 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
             added++;
             if (!points.CheckRad(refine_p, 2, extr_id)) {
               imwrite("fitted.tif", *paint);
-              throw runaway_subpattern("point too close!");
+              failed =true;
+              fail_cause = "point too close!";
             }
-            points.add(extr_id, Point2i(c_i.p.x+0.5, c_i.p.y+0.5));
-            corners_out_map[id_to_key(extr_id)] = c_i;
+            if (!failed) {
+              if (points.add(extr_id, Point2i(c_i.p.x+0.5, c_i.p.y+0.5))) {
+                failed =true;
+                fail_cause = "point too close!";
+              }
+              corners_out_map[id_to_key(extr_id)] = c_i;
+            }
             //FIXME add same corner multiple times if found from different direction?
             //corners_out.push_back(c_o);
           }
         }
+        if (failed)
+          continue;
         //else
         //count multiply found processed points?
       }
@@ -1294,6 +1333,10 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
       if (done % ((corners.size()/100)+1) == 0)
 #pragma omp critical(__print__)
         printprogress(done, corners.size(), counter, " %d corners, range %d, added %d checked %d skipped %d", corners.size(), int_extend_range, added, checked, skipped);
+  }
+  
+  if (failed) {
+    throw runaway_subpattern(fail_cause);
   }
   
   //FIXME push all corners from corners_out_map
@@ -1311,6 +1354,8 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
 
 void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours, Mat *paint, bool *mask_2x2, int page, bool checkrange, const std::vector<Rect> &limits = std::vector<Rect>(), bool show_progress = false, int mul = 0)
 {
+  bool failed = false;
+  std::string fail_cause;
   int counter = 0;
   sort(corners.begin(), corners.end(), corner_cmp);
   
@@ -1337,7 +1382,10 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   }
   
 #pragma omp parallel for schedule(guided, 1)
-  for(int i=0;i<corners.size();i++) {
+  for(int i=0;i<corners.size();i++)
+  {
+    if (failed)
+      continue;
 
 #pragma omp critical (_print_)
   {
@@ -1516,6 +1564,10 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
           }
 
       }
+  }
+  
+  if (failed) {
+    throw runaway_subpattern(fail_cause);
   }
   printf("\n");
   
