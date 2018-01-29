@@ -22,6 +22,7 @@ Example Usage:
 
 <STRONG>Konsole output after running the example:</STRONG>
 <br><br>
+~~~
 count 1 scale 16<br>
 count 4 scale 8<br>
 count 6 scale 4<br>
@@ -44,6 +45,7 @@ findHomography: 307 inliers of 307 calibration points (100.00%)<br>
 rms 0.065783 with full distortion correction<br>
 [0.1355999434112855, 0.01433714395492138, 0, 0, 1.72106180276787e-06, 2.802771688347869,<br>
 -0.01433389696960985, -1.720787289021778e-06, 0, 0, 0, 0, 0, 0]
+~~~
 <br>
 <br>
 <STRONG>Result images:</STRONG>

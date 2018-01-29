@@ -3,7 +3,7 @@ HDmarker
 
 [TOC]
 
-This library is considering all about the calibration target. It contains the hdmarker generation executable which automatically generates the needed target pattern. Besides the libray also detects the pattern in several recursion steps. In this documentation we detail all necessary functionality, how to use it in C++ and provide an example code \ref demo_usage. Furthermore we detail how to generate a matching calibration target.
+Welcome to the documentation for the <STRONG>hdmarker</STRONG> library. This library is considering all about the calibration target. It contains the hdmarker generation executable which automatically generates the needed target pattern. Besides the libray also detects the pattern in several recursion steps. In this documentation we detail all necessary functionality, how to use it in C++ and provide an example code \ref demo_usage. Furthermore we detail how to generate a matching calibration target.
 <br>
 @image html target.png
 <br>
