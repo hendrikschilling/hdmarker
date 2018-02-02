@@ -5,11 +5,8 @@ project(hdmarker)
 #####################################################
 ## INITITIALIZE CMAKE ENVIRONMENT
 #####################################################
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/flexdeplists")
-message("CMAKE_MODULE_PATH: " ${CMAKE_MODULE_PATH})
-
-include(VAD_Wrappers)
-include(VigraAddDep)
+#set(VAD_VERBOSE TRUE)
+include(cmake/vad.cmake)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
