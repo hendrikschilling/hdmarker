@@ -18,8 +18,8 @@ if(EXISTS "${VAD_EXTERNAL_ROOT}/${_VAD_NAME}")
   endif()
 else()
   find_package(Git REQUIRED VAD_IGNORE_DEP)
-  SET(VAD_vad_cmake_GIT_REPO "git@github.com:hendrikschilling/vigra_cmake.git")
-
+  SET(VAD_vad_cmake_GIT_REPO "https://github.com/hendrikschilling/vigra_cmake.git")
+  file(MAKE_DIRECTORY ${VAD_EXTERNAL_ROOT})
   message(STATUS "Git cloning repo '${VAD_${_VAD_NAME}_GIT_REPO}' into '${VAD_EXTERNAL_ROOT}/${_VAD_NAME}'.")
 
   unset(GIT_COMMAND_ARGS)
