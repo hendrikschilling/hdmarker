@@ -12,11 +12,11 @@ The HDMarker calibration pattern consists of two (relatively) independent parts.
 <br>
 <br>
 <DIV style="font-size:12px;"><VAR>
-[page_ID]         defines page number. please always use 0 <br>
-[recursion_level] how many fractal calibration points are generated. <br>
-[target_width]    width of the generated target. <br>
-[target_height]   height of the generated target. <br>
-[save_name]       where to save the target <br>
+@param [page_ID]         defines page number. please always use 0 <br>
+@param [recursion_level] how many fractal calibration points are generated. <br>
+@param [target_width]    width of the generated target. <br>
+@param [target_height]   height of the generated target. <br>
+@param [save_name]       where to save the target <br>
 </VAR>
 </DIV>
 
@@ -25,7 +25,7 @@ Example: <VAR> marker_gen 0 2 demoTarget.png </VAR> <br>
 generates the following target:
 
 @image html demoTarget.png
-
+@image latex demoTarget.png
 
 \attention
 - Please vectorize the output image before printing the target (convert to pdf). Otherwise the resulting image is blurred. <br> e.g. use inkscape: Path->Trace Bitmap and disable all optimizations like edge smoothing (see also: \ref cut_target)
