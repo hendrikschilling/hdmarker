@@ -42,7 +42,7 @@ endif()
 #####################################################
 ## DEFINE make doc
 #####################################################
-find_package(Doxygen REQUIRED)
+find_package(Doxygen)
 if(DOXYGEN_FOUND)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/doc/doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY IMMEDIATE)
     add_custom_target(doc-hdmarker ALL COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
