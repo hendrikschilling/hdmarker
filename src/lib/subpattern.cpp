@@ -1694,7 +1694,7 @@ void refine_recursive(Mat &img, vector<Corner> corners, vector<Corner> &corners_
     for(int i=0;i<cb.size();i++)
       corners_out[corners_out.size()-cb.size()+i] = cb[i];
     
-    printf("write debug!\n");
+//     printf("write debug!\n");
     //imwrite("debug.tif", *paint);
   }
     
