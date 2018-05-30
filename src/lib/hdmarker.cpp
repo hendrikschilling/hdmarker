@@ -3783,7 +3783,8 @@ void Marker::detect_scale(vector<Mat> imgs, vector<Mat> norms, vector<Mat> check
   //cout << corners2.size() << " found " << markers.size() << "markers " << endl;
   
   //markers.resize(0);
-#pragma omp parallel for schedule(dynamic)
+//FIXME this parallel loop sometimes discards markers (see demo/img01092.tif)
+// #pragma omp parallel for schedule(dynamic)
   for (int i=0;i<candidates.size();i++) {
     //if (i%500 == 0)
       //cout << i << "/" << candidates.size() << " found " << markers.size() << "markers, scale " << scale << endl;//"                  \r" << flush;
