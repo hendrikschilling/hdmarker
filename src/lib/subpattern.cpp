@@ -23,8 +23,6 @@
 using namespace std;
 using namespace cv;
 
-Mat paint2;
-
 namespace hdmarker {
   
 static const float min_fit_contrast = 1.0;
@@ -1572,7 +1570,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   }
   printf("\n");
   
-  printf("found %d intitial corners                                                  \n", corners_out.size());
+  printf("found %d initial corners                                                  \n", corners_out.size());
   
   SimpleCloud2d points(img.size().width, img.size().height);
   
