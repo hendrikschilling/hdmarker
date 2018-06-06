@@ -897,7 +897,8 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
   
   int done = 0;
   
-#pragma omp parallel for schedule(guided, 1)
+//FIXME breaks detection in demo img01092.tif
+// #pragma omp parallel for schedule(guided, 1)
   for(int i=0;i<corners.size();i++)
   {
     if (failed)
@@ -1115,7 +1116,8 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
   
   int done = 0;
   
-#pragma omp parallel for schedule(guided, 1)
+//FIXME breaks detection in demo img01092.tif
+// #pragma omp parallel for schedule(guided, 1)
   for(int i=0;i<corners.size();i++)
   {
     if (failed)
@@ -1359,8 +1361,6 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   int counter = 0;
   sort(corners.begin(), corners.end(), corner_cmp);
   
-  paint2 = paint->clone();
-  
   IntCMap corners_interpolated;
   vector<Mat> blurimgs;
   
@@ -1381,7 +1381,8 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
       minsize_fac = sqrt(2);
   }
   
-#pragma omp parallel for schedule(guided, 1)
+//FIXME breaks detection in demo img01092.tif
+// #pragma omp parallel for schedule(guided, 1)
   for(int i=0;i<corners.size();i++)
   {
     if (failed)
@@ -1514,7 +1515,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             double params[10];
             Point2f p_cp = refine_p;
             
-            circle(paint2, refine_p, len*0.05, 255);
+//             circle(paint, refine_p, len*0.05, 255);
             
             double rms = fit_gauss_direct(img, Point2f(len*0.2, len*0.2), refine_p, params, mask_2x2);
             
