@@ -50,7 +50,9 @@ rms 0.065783 with full distortion correction<br>
 <br>
 <STRONG>Result images:</STRONG>
 @image html off_hdm.jpg result.png shows the detected subpatterns
+@image latex off_hdm.jpg result.png shows the detected subpatterns
 <br>
 <br>
 @image html result.png shows the detected marker corners
+@image latex result.png shows the detected marker corners
 <br>
