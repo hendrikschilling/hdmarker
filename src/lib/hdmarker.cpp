@@ -286,6 +286,32 @@ static inline int warp_getpoint2(uchar *srcptr, int w, Point2f c, Point2f d1, Po
     +srcptr[pos+w+1]*fx*fy;
 }
 
+//FIXME different return and check!
+static inline int warp_getpoint2_save(uchar *srcptr, int w, int h, Point2f c, Point2f d1, Point2f d2, int x, int y)
+{
+    
+    int ix, iy;
+    float fx, fy;
+    
+    fx = c.x+x*d1.x+y*d2.x;
+    fy = c.y+x*d1.y+y*d2.y;
+    ix = fx;
+    iy = fy;
+    fx -= ix;
+    fy -= iy;
+    int pos = iy*w+ix;
+    
+    if (pos < 0 || pos+w+1 >= w*h)
+      return 0;
+    
+    float fxm = 1.0-fx;
+    float fym = 1.0-fy;
+    return srcptr[pos]*fxm*fym
+    +srcptr[pos+1]*fx*fym
+    +srcptr[pos+w]*fxm*fy
+    +srcptr[pos+w+1]*fx*fy;
+}
+
 const uint16_t getpoints_intscale = 32;
 const uint16_t getpoints_intscale2 = 256;
 
@@ -493,7 +519,7 @@ static inline int warp_getpoints_x8(uchar *srcptr, int w, Point2f c, Point2f d1,
     
     
     
-    double scoreCorner(Mat &img, Point2f p, Point2f dir[2], int corner_score_size, int corner_score_dead)
+    double scoreCorner(Mat &img, Point2f p, Point2f dir[2], int corner_score_size, int corner_score_dead, bool save_border = false)
     {
       int s = corner_score_size;
       int d = corner_score_dead;
@@ -506,6 +532,7 @@ static inline int warp_getpoints_x8(uchar *srcptr, int w, Point2f c, Point2f d1,
       test_corners[2] = p-dir[0]+dir[1]+b_o;
       
       int w = img.size().width;
+      int h = img.size().height;
       Point2f d1, d2;
       uchar *srcptr = img.ptr<uchar>(0);
       
@@ -515,33 +542,64 @@ static inline int warp_getpoints_x8(uchar *srcptr, int w, Point2f c, Point2f d1,
       
       c += 0.5*d1+0.5*d2;
 	
-      for(y=0;y<s;y++)
-	for(x=d;x<s;x++)
-	  bl += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
-      for(y=0;y<s;y++)
-	for(x=s;x<s+d;x++)
-	  wh += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
-	
-      for(y=d;y<s;y++)
-	for(x=0;x<d;x++)
-	  bl += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
-      for(y=d;y<s;y++)
-	for(x=2*s-d;x<2*s;x++)
-	  wh += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
-	
-      for(y=s;y<2*s-d;y++)
-	for(x=0;x<d;x++)
-	  wh += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
-      for(y=s;y<2*s-d;y++)
-	for(x=2*s-d;x<2*s;x++)
-	  bl += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
+      if (save_border) {
+        for(y=0;y<s;y++)
+          for(x=d;x<s;x++)
+            bl += warp_getpoint2_save(srcptr, w, h, c, d1, d2, x, y);
+        for(y=0;y<s;y++)
+          for(x=s;x<s+d;x++)
+            wh += warp_getpoint2_save(srcptr, w, h, c, d1, d2, x, y);
+          
+        for(y=d;y<s;y++)
+          for(x=0;x<d;x++)
+            bl += warp_getpoint2_save(srcptr, w, h, c, d1, d2, x, y);
+        for(y=d;y<s;y++)
+          for(x=2*s-d;x<2*s;x++)
+            wh += warp_getpoint2_save(srcptr, w, h, c, d1, d2, x, y);
+          
+        for(y=s;y<2*s-d;y++)
+          for(x=0;x<d;x++)
+            wh += warp_getpoint2_save(srcptr, w, h, c, d1, d2, x, y);
+        for(y=s;y<2*s-d;y++)
+          for(x=2*s-d;x<2*s;x++)
+            bl += warp_getpoint2_save(srcptr, w, h, c, d1, d2, x, y);
 
-      for(y=s;y<2*s;y++)
-	for(x=d;x<s;x++)
-	  wh += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
-      for(y=s;y<2*s;y++)
-	for(x=s;x<s+d;x++)
-	  bl += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
+        for(y=s;y<2*s;y++)
+          for(x=d;x<s;x++)
+            wh += warp_getpoint2_save(srcptr, w, h, c, d1, d2, x, y);
+        for(y=s;y<2*s;y++)
+          for(x=s;x<s+d;x++)
+            bl += warp_getpoint2_save(srcptr, w, h, c, d1, d2, x, y);
+      }
+      else {
+        for(y=0;y<s;y++)
+          for(x=d;x<s;x++)
+            bl += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
+        for(y=0;y<s;y++)
+          for(x=s;x<s+d;x++)
+            wh += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
+          
+        for(y=d;y<s;y++)
+          for(x=0;x<d;x++)
+            bl += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
+        for(y=d;y<s;y++)
+          for(x=2*s-d;x<2*s;x++)
+            wh += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
+          
+        for(y=s;y<2*s-d;y++)
+          for(x=0;x<d;x++)
+            wh += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
+        for(y=s;y<2*s-d;y++)
+          for(x=2*s-d;x<2*s;x++)
+            bl += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
+
+        for(y=s;y<2*s;y++)
+          for(x=d;x<s;x++)
+            wh += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
+        for(y=s;y<2*s;y++)
+          for(x=s;x<s+d;x++)
+            bl += warp_getpoint2(srcptr, w, c, d1, d2, x, y);
+      }
 	
 	return (double)(wh-bl) / (2*(corner_score_size*corner_score_size-corner_score_dead*corner_score_dead)*256);
     }
@@ -1231,7 +1289,7 @@ void Marker_Corner::cornerSubPixCPMask( InputArray _image, Point2f &p,
         size = new_size;
       }
         
-      score = scoreCorner(img, p, dir, cso*size, cso*dead);
+      score = scoreCorner(img, p, dir, cso*size, cso*dead, true);
       
       for(step=refine_max;step>=refine_min_step;step*=0.5) {
 	change = true;
@@ -1245,10 +1303,10 @@ void Marker_Corner::cornerSubPixCPMask( InputArray _image, Point2f &p,
 	      else
 		c.p.y +=sign*step;
 	      
-	      if (c.p.x <= 2*cso*size || c.p.y <= 2*cso*size || c.p.x >= img.size().width-2*cso*size || c.p.y >= img.size().height-2*cso*size) 
-		continue;
+// 	      if (c.p.x <= 2*cso*size || c.p.y <= 2*cso*size || c.p.x >= img.size().width-2*cso*size || c.p.y >= img.size().height-2*cso*size) 
+// 		continue;
 	      
-	      c.score = scoreCorner(img, c.p, c.dir, cso*size, cso*dead);
+	      c.score = scoreCorner(img, c.p, c.dir, cso*size, cso*dead, true);
 	      if (dir_step_refine)
  		c.refineDirIterative_size(img, dir_step_refine, dir_step_refine, size, dead);
               
@@ -2714,7 +2772,7 @@ void detect_marker(Marker_Corner *start, Mat harry, Gridstore &candidates, vecto
     if (marker.score > pattern_score_good && marker.id != -1) { 
 	//marker.corners[0].refine(img);
 	//marker.corners[1].refine(img);
-#pragma omp critical
+// #pragma omp critical
       {
 	bool valid = true;
       for(int i=0;i<markers.size();i++)
@@ -4519,12 +4577,16 @@ void detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_size_max,
   for(int j=0;j<allcorners.size();j++)
     if (allcorners[j]) {
       for(int i=0;i<(*allcorners[j]).size();i++)
-	if ((*allcorners[j])[i].page != -1 && (*allcorners[j])[i].score > corner_good) {
+	if ((*allcorners[j])[i].page != -1 /*&& (*allcorners[j])[i].score > corner_good*/) {
 	  mc = (*allcorners[j])[i];
-          //cannot refine if too close to border :-(
-          if (mc.p.x-mc.size/3 <= 0 || mc.p.x+mc.size/3 >= img.size().width || mc.p.y-mc.size/3 <= 0 || mc.p.y+mc.size/3 >= img.size().height) {
-            continue;
-          }
+          //FIXME start score too low for correct corners (see demo...)
+//           printf("start score: %f\n", mc.score);
+          //FIXME whether this works - cannot refine if too close to border :-(
+//           if (mc.p.x-mc.size/3 <= 0 || mc.p.x+mc.size/3 >= img.size().width || mc.p.y-mc.size/3 <= 0 || mc.p.y+mc.size/3 >= img.size().height) {
+//             
+//             cout << "invalid at " << mc.p << " w" << mc.size << "\n";
+//             continue;
+//           }
 	  //FIXME more accurate refinement+larger region than global options?
 	 //mc.estimated = false;
 	  //FIXME check/verify accuracy!
@@ -4536,8 +4598,8 @@ void detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_size_max,
                 mc.scale = s;
                 mc.estimated = true;
                 mc.p = mc.p*(1.0/sd);
-                //mc.estimateDir(scales[s]);
-                //mc.refine(scales[s], true);
+//                 mc.estimateDir(scales[s]);
+//                 mc.refine(scales[s], true);
                 mc.refine_size(scales_border[s], 1.0, true , 0, (mc.size/3)/sd, (mc.size)/sd/6);
                 mc.p = mc.p*sd;
               }
