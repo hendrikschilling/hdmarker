@@ -281,7 +281,8 @@ int main(int argc, char* argv[])
     putText(paint, buf, c.p, FONT_HERSHEY_PLAIN, 0.5, Scalar(0,0,0,0), 2, CV_AA);
     putText(paint, buf, c.p, FONT_HERSHEY_PLAIN, 0.5, Scalar(255,255,255,0), 1, CV_AA);
   }
-  
+  imwrite(argv[2], paint);
+
 //   
   Mat gray;
   if (img.channels() != 1)
@@ -296,7 +297,13 @@ int main(int argc, char* argv[])
   vector<Corner> corners_f2;
   check_calibration(corners_sub, img.size().width, img.size().height, img, corners_f2);
   
-  imwrite(argv[2], paint);
+  if (argc > 3) {
+    cv::Mat paint2 = paint.clone();
+    for (hdmarker::Corner const& c : corners_f2) {
+      circle(paint2, c.p, 3, Scalar(0,0,255,0), -1, LINE_AA);
+    }
+    imwrite(argv[3], paint2);
+  }
 
 //  microbench_measure_output("app finish");
   return EXIT_SUCCESS;
