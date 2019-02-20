@@ -89,21 +89,51 @@ public:
     delete[] points;
   }
   
-  bool CheckRad(Point2f p, int mindist, Point2i idx)
+  bool CheckRad(
+          const Point2f p,
+          const double mindist,
+          const Point2i idx,
+          const bool verbose = true) const
   {
-    int miny = std::max(0, (int)p.y-mindist);
-    int maxy = std::min(_h, (int)p.y+mindist+1);
-    int minx = std::max(0, (int)p.x-mindist);
-    int maxx = std::min(_w, (int)p.x+mindist+1);
-    
+    std::pair<Point2i, Point2f> offender;
+    return CheckRad(p, mindist, idx, offender, verbose);
+  }
+
+  /**
+   * @brief CheckRad checks if the pointcloud contains a point closer to @p than a given distance.
+   * @param[in] p Point which is compared to the pointcloud.
+   * @param[in] mindist distance threshold
+   * @param[in] idx ID
+   * @param[out] offender The point in the cloud which is too close.
+   * @return
+   */
+  bool CheckRad(
+          const Point2f p,
+          const double mindist,
+          const Point2i idx,
+          std::pair<Point2i, Point2f> & offender,
+          const bool verbose = true) const
+  {
+    int mindist_int = static_cast<int>(std::ceil(mindist));
+    int miny = std::max(0, (int)p.y-mindist_int);
+    int maxy = std::min(_h, (int)p.y+mindist_int+1);
+    int minx = std::max(0, (int)p.x-mindist_int);
+    int maxx = std::min(_w, (int)p.x+mindist_int+1);
+
     for(int j=miny;j<maxy;j++)
       for(int i=minx;i<maxx;i++)
-        if (points[j*_w+i].first != Point2i(-1,-1) && points[j*_w+i].first != idx && norm(points[j*_w+i].second-p) <= (double)mindist) {
-          printf("ERROR: area already covered from different idx!\n");
-          cout << points[j*_w+i].first << " @ " << points[j*_w+i].second << " vs " << idx << " @ " << p << endl;
+        if (points[j*_w+i].first != Point2i(-1,-1)
+                && points[j*_w+i].first != idx
+                && norm(points[j*_w+i].second-p) <= mindist) {
+          offender = points[j*_w+i];
+          if (verbose) {
+            cout << "ERROR: area already covered from different idx!" << std::endl
+                 << points[j*_w+i].first << " @ " << points[j*_w+i].second
+                 << " vs " << idx << " @ " << p << endl;
+          }
           return false;
         }
-        
+
     return true;
   }
   
@@ -183,9 +213,14 @@ static bool pointf_cmp(Point2f a, Point2f b)
     return a.x < b.x;
 }
 
-static bool corner_find_off_save(vector<Corner> &corners, Corner ref, int x, int y, Point2f &out)
+static bool corner_find_off_save(
+        const vector<Corner> &corners,
+        Corner ref,
+        int x,
+        int y,
+        Point2f &out)
 {
-  std::vector<Corner>::iterator found;
+  std::vector<Corner>::const_iterator found;
   ref.id.x += x;
   ref.id.y += y;
   found = lower_bound(corners.begin(), corners.end(), ref, corner_cmp);
@@ -202,10 +237,16 @@ int sign(int x)
   return 0;
 }
 
-static bool corner_find_off_save_int(vector<Corner> &corners, Corner ref, int x, int y, Point2f &out, int range)
+static bool corner_find_off_save_int(
+        const vector<Corner> &corners,
+        Corner ref,
+        int x,
+        int y,
+        Point2f &out,
+        int range)
 {
   Corner search = ref;
-  std::vector<Corner>::iterator found;
+  std::vector<Corner>::const_iterator found;
   search.id.x += x;
   search.id.y += y;
   found = lower_bound(corners.begin(), corners.end(), search, corner_cmp);
@@ -518,7 +559,7 @@ template <typename T> inline T clamp(const T& n, const T& lower, const T& upper)
   return std::max<T>(lower, std::min<T>(n, upper));
 }
 
-static bool p_area_in_img_border(Mat &img, Point2f p, float extend)
+static bool p_area_in_img_border(const Mat &img, const Point2f p, const float extend)
 {
   if (p.x - extend <= safety_border 
    || p.y - extend <= safety_border
@@ -570,7 +611,13 @@ static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i 
  * Fit 2d gaussian to image, 5 parameter: \f$x_0\f$, \f$y_0\f$, amplitude, spread, background
  * disregards a border of \f$\lfloor \mathit{size}/5 \rfloor\f$ pixels
  */
-static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *params = NULL, bool *mask_2x2 = NULL, bool retry_allowed = true)
+static double fit_gauss_direct(
+        const Mat &img,
+        const Point2f size,
+        Point2f &p,
+        double *params = nullptr,
+        const bool *mask_2x2 = nullptr,
+        const bool retry_allowed = true)
 {  
   Point2f r_size = size;
   
@@ -578,7 +625,7 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   Point2i hw = r_size*0.5;
   //round down!
   Point2i b = Point2f(r_size.x, r_size.y)*border_frac - Point2f(0.5,0.5);
-  uint8_t *ptr = img.ptr<uchar>(0);
+  const uint8_t *ptr = img.ptr<uchar>(0);
   
   assert(img.depth() == CV_8U);
   assert(img.channels() == 1);
@@ -674,7 +721,6 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   
   if (pcount >= 1000) {
     options.num_threads = 8;
-    options.num_linear_solver_threads = 8;
   }
   
   ceres::Solver::Summary summary;
@@ -874,7 +920,19 @@ static bool marker_corner_valid(const Corner &c, int page, bool checkrange, cons
 }
 
 //FIXME this is still no perfectly repeatable!
-int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, vector<Corner> &corners_out, IntCMap &blacklist_rec, IntCLMap &blacklist, int idx_step, int int_extend_range, SimpleCloud2d &points, Mat *paint = NULL, bool *mask_2x2 = NULL, bool checkrange = false, const std::vector<Rect> &limits = std::vector<Rect>())
+int hdmarker_subpattern_checkneighbours(
+        const Mat &img,
+        const vector<Corner> corners,
+        vector<Corner> &corners_out,
+        IntCMap &blacklist_rec,
+        IntCLMap &blacklist,
+        int idx_step,
+        int int_extend_range,
+        SimpleCloud2d &points,
+        Mat *paint = NULL,
+        bool *mask_2x2 = NULL,
+        bool checkrange = false,
+        const std::vector<Rect> &limits = std::vector<Rect>())
 {
   int counter = 0;
   int added = 0;
@@ -883,6 +941,8 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
   
   bool failed = false;
   std::string fail_cause;
+
+  bool verbose = false;
   
   IntCMap corners_map;
   IntCMap corners_out_map;
@@ -975,8 +1035,10 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
     
 #pragma omp critical
         {
-          if (!points.CheckRad(refine_p, 2, extr_id)) {
-            imwrite("fitted.tif", *paint);
+          if (!points.CheckRad(refine_p, 2, extr_id, verbose)) {
+            if (verbose) {
+              imwrite("fitted.tif", *paint);
+            }
             failed = true;
             fail_cause = "point too close!";
           }
@@ -1030,8 +1092,10 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
           }
           else {
             added++;
-            if (!points.CheckRad(refine_p, 2, extr_id)) {
-              imwrite("fitted.tif", *paint);
+            if (!points.CheckRad(refine_p, 2, extr_id, verbose)) {
+              if (verbose) {
+                imwrite("fitted.tif", *paint);
+              }
               failed =true;
               fail_cause = "point too close!";
             }
@@ -1094,14 +1158,31 @@ float size_from_pers(const Matx33f &p, int idx_step, const Point2i &extr_id)
 }
 
 
-int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corners, vector<Corner> &corners_out, IntCMap &blacklist_rec, IntCLMap &blacklist, int idx_step, int int_extend_range, SimpleCloud2d &points, Mat *paint = NULL, bool *mask_2x2 = NULL, bool checkrange = false, const std::vector<Rect> &limits = std::vector<Rect>(), int mul = 0)
+int hdmarker_subpattern_checkneighbours_pers(
+        const Mat &img,
+        const vector<Corner> & corners,
+        vector<Corner> &corners_out,
+        IntCMap &blacklist_rec,
+        IntCLMap &blacklist,
+        int idx_step,
+        int int_extend_range,
+        SimpleCloud2d &points,
+        Mat *paint = NULL,
+        bool *mask_2x2 = NULL,
+        bool checkrange = false,
+        const std::vector<Rect> &limits = std::vector<Rect>(),
+        int mul = 0)
 {
+  const int old_corners_size = static_cast<int>(corners.size());
   bool failed = false;
+  bool error_detected = false;
   std::string fail_cause;
   int counter = 0;
   int added = 0;
   int checked = 0;
   int skipped = 0;
+
+  bool verbose = false;
   
   IntCMap corners_map;
   IntCMap corners_out_map;
@@ -1118,12 +1199,9 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
 // #pragma omp parallel for schedule(guided, 1)
   for(int i=0;i<corners.size();i++)
   {
-    if (failed)
-      continue;
+    bool failed = false;
     
-    Corner c;
-    
-    c = corners[i];
+    const Corner &c = corners[i];
   
 #pragma omp atomic 
     done++;
@@ -1235,9 +1313,12 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         
 #pragma omp critical
         {
-          if (!points.CheckRad(refine_p, 1, extr_id)) {
-            imwrite("fitted.tif", *paint);
-            failed =true;
+          if (!points.CheckRad(refine_p, 1, extr_id, verbose)) {
+            if (verbose) {
+              imwrite("fitted.tif", *paint);
+            }
+            failed = true;
+            error_detected = true;
             fail_cause = "point too close!";
           }
         }
@@ -1246,7 +1327,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         
         if (!p_area_in_img_border(img, refine_p, size)
           /*|| is_diff_larger(size, c.size, max_size_diff)*/) {
-            Interpolated_Corner c_i(extr_id, refine_p, false);
+          Interpolated_Corner c_i(extr_id, refine_p, false);
           continue;
         }
         
@@ -1308,14 +1389,18 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
           }
           else {
             added++;
-            if (!points.CheckRad(refine_p, 2, extr_id)) {
-              imwrite("fitted.tif", *paint);
-              failed =true;
+            if (!points.CheckRad(refine_p, 2, extr_id, verbose)) {
+              if (verbose) {
+                imwrite("fitted.tif", *paint);
+              }
+              failed = true;
+              error_detected = true;
               fail_cause = "point too close!";
             }
             if (!failed) {
               if (points.add(extr_id, Point2i(c_i.p.x+0.5, c_i.p.y+0.5))) {
                 failed =true;
+                error_detected = true;
                 fail_cause = "point too close!";
               }
               corners_out_map[id_to_key(extr_id)] = c_i;
@@ -1346,14 +1431,31 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
     c_o.size = it->second.size;
     corners_out.push_back(c_o);
   }
+  added = static_cast<int>(corners.size()) - old_corners_size;
   
   printf("added %d corners\n", added);
   
   return added;
 }
 
-void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int in_idx_step, float in_c_offset, int out_idx_scale, int out_idx_offset, bool ignore_corner_neighbours, Mat *paint, bool *mask_2x2, int page, bool checkrange, const std::vector<Rect> &limits = std::vector<Rect>(), bool show_progress = false, int mul = 0)
+void hdmarker_subpattern_step(
+        const Mat &img,
+        vector<Corner> corners,
+        vector<Corner> &corners_out,
+        int in_idx_step,
+        float in_c_offset,
+        int out_idx_scale,
+        int out_idx_offset,
+        bool ignore_corner_neighbours,
+        Mat *paint,
+        bool *mask_2x2,
+        int page,
+        bool checkrange,
+        const std::vector<Rect> &limits = std::vector<Rect>(),
+        bool show_progress = false,
+        int mul = 0)
 {
+  cv::Mat_<bool> mask(img.size(), false);
   bool failed = false;
   std::string fail_cause;
   int counter = 0;
@@ -1451,7 +1553,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
         if (corner_find_off_save_int(corners, c, 0, in_idx_step, ipoints[3], int_search_range)) continue;
         
         
-        double len = FLT_MAX;
+        double len = std::numeric_limits<double>::max();
         for(int i=0;i<4;i++) {
           Point2f v = ipoints[i]-ipoints[(i+1)%4];
           len = min(len, norm(v));
@@ -1583,6 +1685,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
       while (found > (corners_out.size()-found)*0.01 || (found > 1 && r == int_extend_range)) {
         //hdmarker_subpattern_checkneighbours results depend on corner ordering - make repeatable for threading!
         found = hdmarker_subpattern_checkneighbours_pers(img, corners_out, corners_out, blacklist, blacklist_neighbours, 2, r, points, paint, mask_2x2, checkrange, limits, mul);
+
         std::sort(corners_out.begin(), corners_out.end(), corner_cmp);
         if (found > (corners_out.size()-found)*0.01) {
           r = 1;
@@ -1595,7 +1698,17 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
   }
 }
 
-void refine_recursive(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size, Mat *paint, bool *mask_2x2, int page, const Rect &limit, int flags)
+void refine_recursive(
+        const Mat &img,
+        vector<Corner> corners,
+        vector<Corner> &corners_out,
+        int depth,
+        double *size,
+        Mat *paint,
+        bool *mask_2x2,
+        int page,
+        const Rect &limit,
+        int flags)
 {
   std::vector<Rect> limits;
   
@@ -1605,7 +1718,17 @@ void refine_recursive(Mat &img, vector<Corner> corners, vector<Corner> &corners_
   refine_recursive(img, corners, corners_out, depth, size, paint, mask_2x2, page, limits, flags);
 }
 
-void refine_recursive(Mat &img, vector<Corner> corners, vector<Corner> &corners_out, int depth, double *size, Mat *paint, bool *mask_2x2, int page, const std::vector<Rect> &limits, int flags)
+void refine_recursive(
+        const Mat &img,
+        vector<Corner> corners,
+        vector<Corner> &corners_out,
+        const int depth,
+        double *size,
+        Mat *paint,
+        bool *mask_2x2,
+        int page,
+        const std::vector<Rect> &limits,
+        int flags)
 {
   int keep;
   bool checkrange = true;
@@ -1624,11 +1747,8 @@ void refine_recursive(Mat &img, vector<Corner> corners, vector<Corner> &corners_
   //imwrite("orig.tif", img);
   
   //TODO make this configurable
-  if (!paint)
+  if (!paint) {
     paint = &paint_alloc;
-  
-  
-  if (paint) {
     paint->create(img.size(), CV_8U);
     paint->setTo(Scalar(0));
   }
