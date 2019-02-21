@@ -4724,4 +4724,17 @@ void Marker::init(void)
         }
 }
 
+void write(cv::FileStorage& fs, const std::string&, const Corner& x) {
+  x.write(fs);
+}
+
+void read(const cv::FileNode& node, Corner& x, const Corner& default_value) {
+  if(node.empty()) {
+    x = default_value;
+  }
+  else {
+    x.read(node);
+  }
+}
+
 } //namespace hdmarker

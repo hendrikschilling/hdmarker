@@ -123,10 +123,34 @@ public :
   
   void paint(cv::Mat &img);
   void paint_text(cv::Mat &paint);
+
+
+  void write(cv::FileStorage& fs) const                        //Write serialization for this class
+  {
+      fs << "{"
+         << "p" << p
+         << "pc0" << pc[0]
+         << "pc1" << pc[1]
+         << "pc2" << pc[2]
+         << "id" << id
+         << "page" << page
+         << "size" << size
+         << "}";
+  }
+  void read(const cv::FileNode& node)                          //Read serialization for this class
+  {
+      node["p"] >> p;
+      node["pc0"] >> pc[0];
+      node["pc1"] >> pc[1];
+      node["pc2"] >> pc[2];
+      page = (int)node["page"];
+      size = (float)node["page"];
+  }
 };
 
+void write(cv::FileStorage& fs, const std::string&, const Corner& x);
 
-
+void read(const cv::FileNode& node, Corner& x, const Corner& default_value = Corner());
 
 /**
 * @class Marker
