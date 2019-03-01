@@ -72,6 +72,13 @@ set(HDMARKER_LIBRARY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${CMAKE_SHARED_LIBRARY_PR
 add_executable(marker_gen src/bin/marker_gen.cpp)
 target_link_libraries(marker_gen hdmarker)
 
+find_package(GTest REQUIRED)
+add_executable(tests src/tests.cpp)
+target_link_libraries(tests
+  hdmarker
+  ${GTEST_BOTH_LIBRARIES}
+  )
+
 add_dependencies(hdmarker hdmarker-header-export)
 set(CONF_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/include)
 export(TARGETS hdmarker FILE ${hdmarker_BINARY_DIR}/hdmarkerTargets.cmake)
@@ -91,7 +98,11 @@ add_subdirectory(demo/)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/hdmarker.pc.in ${CMAKE_CURRENT_BINARY_DIR}/hdmarker.pc @ONLY)
 message("Path: " ${CMAKE_INSTALL_DATAROOTDIR})
 install(FILES ${CMAKE_BINARY_DIR}/hdmarker.pc DESTINATION "${CMAKE_INSTALL_PREFIX}/share/pkgconfig")
+install(FILES ${CMAKE_BINARY_DIR}/hdmarker.pc DESTINATION "${CMAKE_INSTALL_PREFIX}/share/pkgconfig")
 
+install (FILES src/lib/gridstore.hpp src/lib/hdmarker.hpp src/lib/loess.hpp src/lib/subpattern.hpp src/lib/timebench.hpp DESTINATION ${CMAKE_INSTALL_PREFIX}/include/hdmarker)
+
+install (TARGETS hdmarker DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
 
 
 

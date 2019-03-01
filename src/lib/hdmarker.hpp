@@ -143,8 +143,9 @@ public :
       node["pc0"] >> pc[0];
       node["pc1"] >> pc[1];
       node["pc2"] >> pc[2];
+      node["id"] >> id;
       page = (int)node["page"];
-      size = (float)node["page"];
+      size = (float)node["size"];
   }
 };
 
