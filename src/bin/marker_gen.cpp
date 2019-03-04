@@ -109,6 +109,15 @@ void checker_add_recursive(Mat &img, Mat &checker)
 
 int main(int argc, char* argv[])
 {
+  if (argc != 4 && argc != 6) {
+    std::cerr << "Usage:" << std::endl
+              << "4-parameter mode: " << (argc > 0 ? argv[0] : "program_name")
+              << " <page nr.> <number of recursive markers> <output image filename>"
+              << std::endl
+              << "6-parameter mode: " << (argc > 0 ? argv[0] : "program_name")
+              << " <page nr.> <number of recursive markers> <width> <height> <output image filename>" << std::endl << std::endl;
+    return EXIT_FAILURE;
+  }
   int page = atoi(argv[1]); 
   
   if (argc == 4) {
