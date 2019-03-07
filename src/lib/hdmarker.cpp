@@ -1027,8 +1027,8 @@ void cornerSubPixCP( InputArray _image, Point2f &p,
   const int MAX_ITERS = 100;
   int win_w = win.width * 2 + 1, win_h = win.height * 2 + 1;
   int i, j, k;
-  int max_iters = (criteria.type & CV_TERMCRIT_ITER) ? MIN(MAX(criteria.maxCount, 1), MAX_ITERS) : MAX_ITERS;
-  double eps = (criteria.type & CV_TERMCRIT_EPS) ? MAX(criteria.epsilon, 0.) : 0;
+  int max_iters = (criteria.type & cv::TermCriteria::Type::MAX_ITER) ? MIN(MAX(criteria.maxCount, 1), MAX_ITERS) : MAX_ITERS;
+  double eps = (criteria.type & cv::TermCriteria::Type::EPS) ? MAX(criteria.epsilon, 0.) : 0;
   eps *= eps; // use square of error in comparsion operations
 
   cv::Mat src = _image.getMat();
@@ -1136,8 +1136,8 @@ void Marker_Corner::cornerSubPixCPMask( InputArray _image, Point2f &p,
   const int MAX_ITERS = 100;
   int win_w = win.width * 2 + 1, win_h = win.height * 2 + 1;
   int i, j, k;
-  int max_iters = (criteria.type & CV_TERMCRIT_ITER) ? MIN(MAX(criteria.maxCount, 1), MAX_ITERS) : MAX_ITERS;
-  double eps = (criteria.type & CV_TERMCRIT_EPS) ? MAX(criteria.epsilon, 0.) : 0;
+  int max_iters = (criteria.type & cv::TermCriteria::Type::MAX_ITER) ? MIN(MAX(criteria.maxCount, 1), MAX_ITERS) : MAX_ITERS;
+  double eps = (criteria.type & TermCriteria::EPS) ? MAX(criteria.epsilon, 0.) : 0;
   eps *= eps; // use square of error in comparsion operations
 
   cv::Mat src = _image.getMat();
@@ -4544,7 +4544,7 @@ void detect(Mat img, vector<Corner> &corners, bool use_rgb, int marker_size_max,
   
   if (img.channels() != 1) {
     col = img.clone();
-    cvtColor(img, img, CV_BGR2GRAY);
+    cvtColor(img, img, cv::COLOR_BGR2GRAY);
   }
   else
     use_rgb = false;
