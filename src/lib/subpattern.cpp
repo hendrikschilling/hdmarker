@@ -1138,6 +1138,11 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         
         Point2i extr_id = Point2i(c.id)-Point2i(sx,sy)*idx_step;
         
+        Point2i id_scaled = Point2f(extr_id)*(1.0/mul);
+        if (id_scaled.x <= 0 || id_scaled.y <= 0 || id_scaled.x >= 32 ||id_scaled.y >= 32) {
+          continue;
+        }
+
         if (!check_limits(extr_id, checkrange, limits))
           continue;
         
@@ -1161,7 +1166,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         
         std::vector<Point2f> local_ids;
         std::vector<Point2f> local_points;
-        
+
         float local_minsize = FLT_MAX;
         float local_maxsize = 0.0;
         float avg_size = 0.0;
@@ -1169,6 +1174,12 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         for(int csy=-c_range;csy<=c_range;csy++)
           for(int csx=-c_range;csx<=c_range;csx++) {
             Point2i search_id = Point2i(c.id)+Point2i(csx,csy)*idx_step;
+
+            Point2i id_scaled = Point2f(search_id)*(1.0/mul);
+            if (id_scaled.x <= 0 || id_scaled.y <= 0 || id_scaled.x >= 32 ||id_scaled.y >= 32) {
+              continue;
+            }
+
             IntCMap::iterator it = corners_map.find(id_to_key(search_id));
             //FIXME size calculation might be off for heavily tilted targets...
             if (it == corners_map.end())
