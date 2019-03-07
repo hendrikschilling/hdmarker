@@ -528,7 +528,7 @@ static bool p_area_in_img_border(Mat &img, Point2f p, float extend)
   return true;
 }
 
-static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i size, double *p)
+static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i size, double *p, Point2i extr_id = {})
 {
   uint8_t *ptr = img.ptr<uchar>(0);
   int w = img.size().width;
@@ -564,6 +564,12 @@ static void draw_gauss2d_plane_direct(Mat &img, Point2f c, Point2f res, Point2i 
       
       ptr[y*w+x] = clamp<int>(p[4] + p[5]*dx + p[6]*dy + (p[2]-p[4])*exp(-(a*x2-2*b*xy2+c*y2)), 0, 255);
     }
+
+//     char buf[64];
+//     sprintf(buf, "%d",extr_id.x);
+//     putText(img, buf, res, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
+//     sprintf(buf, "%d",extr_id.y);
+//     putText(img, buf, res+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
 }
 
 /**
@@ -1010,12 +1016,7 @@ int hdmarker_subpattern_checkneighbours(Mat &img, const vector<Corner> corners, 
         if (paint) 
 #pragma omp critical (_paint_)
         {
-          draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(c_i.size, c_i.size), params);
-          /*char buf[64];
-          sprintf(buf, "%d",extr_id.x);
-          putText(*paint, buf, refine_p, FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));
-          sprintf(buf, "%d",extr_id.y);
-          putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));*/
+          draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(c_i.size, c_i.size), params, extr_id);
         }
           
 #pragma omp critical
@@ -1282,8 +1283,8 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
         if (paint) 
 #pragma omp critical (_paint_)
         {
-          draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(size, size), params);
-          
+          draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(size, size), params, extr_id);
+
             if (eval_gt) {
               Matx31d gt_wp(extr_id.x*(1.0/mul),extr_id.y*(1.0/mul),0);
               Matx31d gt_cp = Matx33d(gt_r)*gt_wp + Matx31d(gt_t);
@@ -1538,10 +1539,10 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
               
 #pragma omp critical (_paint_)
           if (paint) {
-            draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(len*0.2, len*0.2), params);
             Point2i extr_id(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset);
+            draw_gauss2d_plane_direct(*paint, p_cp, refine_p, Point2f(len*0.2, len*0.2), params, extr_id);
 
-            
+
             if (eval_gt) {
               Matx31d gt_wp(target_id.x*(1.0/mul),target_id.y*(1.0/mul),0);
               Matx31d gt_cp = Matx33d(gt_r)*gt_wp + Matx31d(gt_t);
