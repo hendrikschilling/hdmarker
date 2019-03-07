@@ -280,6 +280,9 @@ int main(int argc, char* argv[])
     circle(paint, c.p, 1, Scalar(0,255,0,0));
     putText(paint, buf, c.p, FONT_HERSHEY_PLAIN, 0.5, Scalar(0,0,0,0), 2, cv::LINE_AA);
     putText(paint, buf, c.p, FONT_HERSHEY_PLAIN, 0.5, Scalar(255,255,255,0), 1, cv::LINE_AA);
+    sprintf(buf, "%d", c.page);
+    putText(paint, buf, c.p+Point2f(0, 12), FONT_HERSHEY_PLAIN, 0.5, Scalar(0,0,0,0), 2, cv::LINE_AA);
+    putText(paint, buf, c.p+Point2f(0, 12), FONT_HERSHEY_PLAIN, 0.5, Scalar(255,255,255,0), 1, cv::LINE_AA);
   }
   
 //   
