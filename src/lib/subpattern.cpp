@@ -680,7 +680,6 @@ static double fit_gauss_direct(Mat &img, Point2f size, Point2f &p, double *param
   
   if (pcount >= 1000) {
     options.num_threads = 8;
-    options.num_linear_solver_threads = 8;
   }
   
   ceres::Solver::Summary summary;
