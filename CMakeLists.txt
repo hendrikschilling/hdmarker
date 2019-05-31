@@ -93,5 +93,9 @@ message("Path: " ${CMAKE_INSTALL_DATAROOTDIR})
 install(FILES ${CMAKE_BINARY_DIR}/hdmarker.pc DESTINATION "${CMAKE_INSTALL_PREFIX}/share/pkgconfig")
 
 
+foreach(HEADER hdmarker gridstore subpattern)
+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/lib/${HEADER}.hpp DESTINATION "${CMAKE_INSTALL_PREFIX}/include/hdmarker")
+endforeach()
+
 
 
