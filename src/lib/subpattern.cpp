@@ -1106,6 +1106,11 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
   
   IntCMap corners_map;
   IntCMap corners_out_map;
+
+  int page = 0;
+  if (!corners.empty()) {
+      page = corners.front().page;
+  }
   
   for(int i=0;i<corners.size();i++) {
     Corner c = corners[i];
@@ -1354,7 +1359,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
   //FIXME push all corners from corners_out_map
   //corners_out.push_back(c_o);
   for(auto it=corners_out_map.begin();it!=corners_out_map.end();++it) {
-    Corner c_o(it->second.p, it->second.id, 0);
+    Corner c_o(it->second.p, it->second.id, page);
     c_o.size = it->second.size;
     corners_out.push_back(c_o);
   }
@@ -1566,7 +1571,7 @@ void hdmarker_subpattern_step(Mat &img, vector<Corner> corners, vector<Corner> &
             putText(*paint, buf, refine_p+Point2f(0,7), FONT_HERSHEY_SIMPLEX, 0.3, CV_RGB(127,127,127));*/
           }
             
-            Corner c_o(refine_p, Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), 0);
+            Corner c_o(refine_p, Point2i(c.id.x*out_idx_scale+2*x+out_idx_offset, c.id.y*out_idx_scale+2*y+out_idx_offset), c.page);
             c_o.size = len*0.2;
     #pragma omp critical
             {
