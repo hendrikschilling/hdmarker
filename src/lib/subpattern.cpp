@@ -1106,6 +1106,11 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
   
   IntCMap corners_map;
   IntCMap corners_out_map;
+
+  int page = 0;
+  if (!corners.empty()) {
+      page = corners.front().page;
+  }
   
   for(int i=0;i<corners.size();i++) {
     Corner c = corners[i];
@@ -1354,7 +1359,7 @@ int hdmarker_subpattern_checkneighbours_pers(Mat &img, const vector<Corner> corn
   //FIXME push all corners from corners_out_map
   //corners_out.push_back(c_o);
   for(auto it=corners_out_map.begin();it!=corners_out_map.end();++it) {
-    Corner c_o(it->second.p, it->second.id, 0);
+    Corner c_o(it->second.p, it->second.id, page);
     c_o.size = it->second.size;
     corners_out.push_back(c_o);
   }
